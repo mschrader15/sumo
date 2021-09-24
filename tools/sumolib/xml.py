@@ -340,7 +340,7 @@ def _open(xmlfile, encoding="utf8"):
     return xmlfile
 
 
-def parse_fast(xmlfile, element_name, attrnames, warn=False, optional=False, encoding="utf8"):
+def parse_fast(xmlfile, element_name, attrnames, warn=False, optional=False, threads=None, encoding="utf8"):
     """
     Parses the given attrnames from all elements with element_name
     @Note: The element must be on its own line and the attributes must appear in
@@ -348,13 +348,16 @@ def parse_fast(xmlfile, element_name, attrnames, warn=False, optional=False, enc
     @Example: parse_fast('plain.edg.xml', 'edge', ['id', 'speed'])
     """
     Record, reprog = _createRecordAndPattern(element_name, attrnames, warn, optional)
-    for line in _open(xmlfile, encoding):
-        m = reprog.search(line)
-        if m:
-            if optional:
-                yield Record(**m.groupdict())
-            else:
-                yield Record(*m.groups())
+    if not threads:
+        for line in _open(xmlfile, encoding):
+            m = reprog.search(line)
+            if m:
+                if optional:
+                    yield Record(**m.groupdict())
+                else:
+                    yield Record(*m.groups())
+    else:
+
 
 
 def parse_fast_nested(xmlfile, element_name, attrnames, element_name2, attrnames2,
@@ -425,6 +428,22 @@ def quoteattr(val):
     # saxutils sometimes uses single quotes around the attribute
     # we can prevent this by adding an artificial single quote to the value and removing it again
     return '"' + xml.sax.saxutils.quoteattr("'" + val)[2:]
+
+
+
+class ThreadedXMLParser:
+
+    def __init__(self, file_obj, Record, reprog, Record2=None, reprog2=None, sorted=False):
+        self._data = mmap.mmap(file_obj.fileno(), 0)
+        self._record = Record
+
+    
+    def _splitter(self, ):
+        
+
+    
+
+
 
 
 class EmissionsXML2CSV:
