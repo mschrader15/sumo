@@ -18,15 +18,53 @@
 import os
 import sys
 if 'SUMO_HOME' in os.environ:
-    tools = os.path.join(os.environ['SUMO_HOME'], 'tools')
+    tools = os.path.join(os.environ['SUMO_HOME']) #, 'tools')
     sys.path.append(tools)
 else:
     sys.exit("please declare environment variable 'SUMO_HOME'")
-import sumolib  # noqa
-from sumolib.xml import parse_fast_nested  # noqa
+import tools.sumolib as sumolib  # noqa
+from tools.sumolib.xml import parse_fast_nested  # noqa
 
-for ptline, ptline_route in parse_fast_nested("ptlines.xml",
-                                              "ptLine", ("id", "name", "line", "type"),
-                                              "route", "edges"):
-    print(ptline.id, ptline.attr_name, ptline.line, ptline.type)
-    print(ptline_route.edges)
+# for ptline, ptline_route in parse_fast_nested("ptlines.xml",
+#                                               "ptLine", ("id", "name", "line", "type"),
+#                                               "route", "edges"):
+#     print(ptline.id, ptline.attr_name, ptline.line, ptline.type)
+#     print(ptline_route.edges)
+
+
+file_path = r"C:\Users\gle\Desktop\_OUTPUT_emissions.xml"
+
+if __name__ == "__main__":
+
+    with open(r"C:\Users\gle\Desktop\_OUTPUT_emissions.csv", 'w') as f:
+        f.writelines(
+            (
+                "".join((",".join([line[0].time, *list(line[1])]), "\n")) for line in sumolib.xml.parse_fast_nested(
+                    file_path,
+                    'timestep',
+                    ['time'],
+                    "vehicle",
+                    ['id',
+                    'eclass',
+                    'CO2',
+                    'CO',
+                    'HC',
+                    'NOx',
+                    'PMx',
+                    'fuel',
+                    'electricity',
+                    'noise',
+                    'route',
+                    'type',
+                    'waiting',
+                    'lane',
+                    'pos',
+                    'speed',
+                    'angle',
+                    'x',
+                    'y'
+                    ],
+                    threads=8
+                )
+            )
+        )
