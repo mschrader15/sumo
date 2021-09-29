@@ -20,7 +20,7 @@ from __future__ import print_function
 from __future__ import absolute_import
 from contextlib import contextmanager
 import functools
-from multiprocessing.managers import Namespace
+from multiprocessing import shared_memory
 import os
 import queue
 import sys
@@ -47,6 +47,9 @@ from copy import deepcopy
 import multiprocessing as mp
 from types import SimpleNamespace
 import uuid
+import zlib
+import sys
+import pickle
 # from multiprocessing import set_start_method, get_context
 # set_start_method("spawn")
 
@@ -296,7 +299,8 @@ def _get_compound_object(node, elementTypes, element_name, element_attrs, attr_c
     child_list = []
     if len(node) > 0:
         for c in node:
-            child = _get_compound_object(c, elementTypes, c.tag, element_attrs, attr_conversions, heterogeneous, warn)
+            child = _get_compound_object(
+                c, elementTypes, c.tag, element_attrs, attr_conversions, heterogeneous, warn)
             child_dict.setdefault(c.tag, []).append(child)
             child_list.append(child)
     attrnames = elementTypes[element_name]._original_fields
@@ -310,7 +314,8 @@ def create_document(root_element_name, attrs=None, schema=None):
         attrs = {}
     if schema is None:
         attrs["xmlns:xsi"] = "http://www.w3.org/2001/XMLSchema-instance"
-        attrs["xsi:noNamespaceSchemaLocation"] = "http://sumo.dlr.de/xsd/" + root_element_name + "_file.xsd"
+        attrs["xsi:noNamespaceSchemaLocation"] = "http://sumo.dlr.de/xsd/" + \
+            root_element_name + "_file.xsd"
     clazz = compound_object(root_element_name, sorted(attrs.keys()))
     return clazz([attrs.get(a) for a in sorted(attrs.keys())], OrderedDict())
 
@@ -365,15 +370,18 @@ def simple_namespace_creator(keywords):
     return create_named_tuple
 
 
-class RecordLike(Namespace):
+class RecordLike(SimpleNamespace):
 
     def __init__(self, **kwrgs):
         super().__init__(**kwrgs)
-        self._ordered_kwargs = [key for key in kwrgs.keys()] 
+        # self._ordered_kwargs = [key for key in kwrgs.keys()]
 
     def __iter__(self, ):
-        for item in self._ordered_kwargs:
-            yield self.__dict__[item] 
+        yield from self.__dict__.values()
+    
+    # def 
+        # for item in self._ordered_kwargs:
+        #     [item]
 
 
 def _createRecordAndPattern(element_name, attrnames, warn, optional,):
@@ -381,7 +389,7 @@ def _createRecordAndPattern(element_name, attrnames, warn, optional,):
         attrnames = [attrnames]
     prefixedAttrnames = [_prefix_keyword(a, warn) for a in attrnames]
     name = _prefix_keyword(element_name, warn)
-    Record = namedtuple(name, prefixedAttrnames, module="__mp_main__")
+    Record = namedtuple(name, prefixedAttrnames, ) # module="__mp_main__")
     pickleable_record = prefixedAttrnames
     if optional:
         pattern = ''.join(['<%s' % element_name] +
@@ -390,14 +398,14 @@ def _createRecordAndPattern(element_name, attrnames, warn, optional,):
         pattern = '.*'.join(['<%s' % element_name] +
                             ['%s="([^"]*)"' % attr for attr in attrnames])
     reprog = re.compile(pattern)
-    
+
     # globals()[name].__qualname__ = name
     # import __main__
     # setattr(__main__, globals()[name].__name__, globals()[name])
     # Record.__module__ = "__main__"
     # Record.__qualname__ = 'Record'
     # globals()[_prefix_keyword(element_name, warn)] = Record
-    
+
     # exec(f"global {name}")
 
     return Record, reprog, pickleable_record
@@ -408,7 +416,7 @@ def _open(xmlfile, encoding="utf8", raw=False):
         if xmlfile.endswith(".gz"):
             return gzip.open(xmlfile, "rt")
         if encoding is not None:
-            return io.open(xmlfile, encoding=encoding, mode='r+' if raw else None)
+            return io.open(xmlfile, encoding=encoding,) if not raw else io.open(xmlfile, encoding=encoding, mode='r+')
     return xmlfile
 
 
@@ -426,7 +434,8 @@ def parse_fast(xmlfile, element_name, attrnames, warn=False, optional=False, thr
     the given order.
     @Example: parse_fast('plain.edg.xml', 'edge', ['id', 'speed'])
     """
-    Record, reprog = _createRecordAndPattern(element_name, attrnames, warn, optional)
+    Record, reprog = _createRecordAndPattern(
+        element_name, attrnames, warn, optional)
     if not threads:
         for line in _open(xmlfile, encoding):
             m = reprog.search(line)
@@ -442,8 +451,6 @@ def parse_fast(xmlfile, element_name, attrnames, warn=False, optional=False, thr
         )
 
 
-
-
 def parse_fast_nested(xmlfile, element_name, attrnames, element_name2, attrnames2,
                       warn=False, optional=False, threads=None, encoding="utf8"):
     """
@@ -453,56 +460,76 @@ def parse_fast_nested(xmlfile, element_name, attrnames, element_name2, attrnames
     the given order.
     @Example: parse_fast_nested('fcd.xml', 'timestep', ['time'], 'vehicle', ['id', 'speed', 'lane']):
     """
-    Record, reprog, pickle_record = _createRecordAndPattern(element_name, attrnames, warn, optional, )
-    Record2, reprog2, pickle_record_2 = _createRecordAndPattern(element_name2, attrnames2, warn, optional)
+    Record, reprog, pickle_record = _createRecordAndPattern(
+        element_name, attrnames, warn, optional, )
+    Record2, reprog2, pickle_record_2 = _createRecordAndPattern(
+        element_name2, attrnames2, warn, optional)
     # globals()[name] = tmp
     # globals()[name_2] = tmp2
     record = None
     if threads:
         # mp.set_start_method("spawn", force=True)
-        q = mp.Queue()
+        m = mp.Manager()
+
+        # l = m.list()
+        # q = mp.Manager().()
+        q = m.Queue()
 
         # ThreadedXMLParser.set_records([globals()[name], globals()[name_2]])
         # with globalized(pickle_record), globalized(pickle_record_2):
 
         threaded_worker = ThreadedXMLParser(
-                q=q,
-                file_obj=xmlfile,
-                thread_num=threads,
-                reprogs=([element_name, attrnames], [element_name2, attrnames2]),
-                records=(pickle_record, pickle_record_2),
-                encoding=encoding,
-                optional=optional
-            )
+            q=q,
+            d=None,
+            file_obj=xmlfile,
+            thread_num=threads,
+            reprogs=((reprog, attrnames), (reprog2, attrnames2)),
+            records=(pickle_record, pickle_record_2),
+            encoding=encoding,
+            optional=optional
+        )
 
-            # threaded_worker.set_records([globals()[name], globals()[name_2]])
-        threaded_worker.run()
+        # threaded_worker.set_records([globals()[name], globals()[name_2]])
+        threaded_worker.start()
+
         # p = mp.Process(target=threaded_worker.run, )
-        
+
         # p.start()
-        # threaded_worker.start()            
-        iterator = ThreadedXMLParser.queue_iterator(threaded_worker.q)
+        # threaded_worker.start()
+        iterator = ThreadedXMLParser.queue_iterator(q)
     else:
         iterator = _open(xmlfile, encoding)
+    
+    # m2 = True
+    record = ()
+    m2 = ()
     
     for line in iterator:
         # t0 = time.time()
         if not threads:
             m2 = reprog2.search(line)
-            m2 = _unpacker(Record2, optional, m2)
-        else:
-            m2 = line[1]
-            record = line[0]
+            if m2:
+                m2 = _unpacker(Record2, optional, m2)  # m2.groups() 
+                # m2 = 
+        else:   
+            # m2 = line[1] #line[1] # _unpacker(Record2, optional, grouped_obj=line[1])
+            record, m2 = line  #.split('|') #line# _unpacker(Record, optional, grouped_obj=line[0])
+            # record = record.split("~")
+            # m2 = line[1] ^ record if m2 else line[1]
+            # m2 = m2.split("~")
+            # m2 = line[1]
+            # m2 = ", ".join([*record, *m2])
             # record = {'time': 0}
         if record and m2:
             yield record, m2
         else:
             m = reprog.search(line)
             if m:
-                record = _unpacker(Record, optional, line[0])
+                record = _unpacker(Record, optional, m)  # m.groups()  
             elif element_name in line:
                 record = None
-        
+
+
 def writeHeader(outf, script=None, root=None, schemaPath=None, rootAttrs="", options=None):
     """
     Writes an XML header with schema information and a comment on how the file has been generated
@@ -517,7 +544,8 @@ def writeHeader(outf, script=None, root=None, schemaPath=None, rootAttrs="", opt
     if script is None or script == "$Id$":
         script = os.path.basename(sys.argv[0])
     if options is None:
-        optionString = "  options: %s" % (' '.join(sys.argv[1:]).replace('--', '<doubleminus>'))
+        optionString = "  options: %s" % (
+            ' '.join(sys.argv[1:]).replace('--', '<doubleminus>'))
     else:
         optionString = options.config_as_string
 
@@ -543,25 +571,31 @@ def quoteattr(val):
     return '"' + xml.sax.saxutils.quoteattr("'" + val)[2:]
 
 
-class ThreadedXMLParser: #(mp.Process):
+# def xor_two_str(a,b):
+#     return ''.join([hex(ord(a[i%len(a)]) ^ ord(b[i%(len(b))]))[2:] for i in range(max(len(a), len(b)))])
 
-    TABLE_REPLACE = str.maketrans(dict.fromkeys('\r\n\t"'))
 
-    def __init__(self, file_obj, q, thread_num, records, reprogs, sorted=True, encoding='utf', optional=False):
-        # mp.Process.__init__(self)
+
+class ThreadedXMLParser(mp.Process):
+
+    # TABLE_REPLACE = str.maketrans(dict.fromkeys('\r\n\t"'))
+
+    def __init__(self, file_obj, q, d, thread_num, records, reprogs, sorted=True, encoding='utf', optional=False):
+        mp.Process.__init__(self)
         self.q = q
-        self._file_obj = file_obj # mmap.mmap(file_obj.fileno(), 0)
-        self._records = records # [globals()[rec] for rec in records]
+        # self.d=d
+        self._file_obj = file_obj  # mmap.mmap(file_obj.fileno(), 0)
+        self._records = records  # [globals()[rec] for rec in records]
         # preprocessing
-        self._reprogs = [[re, [[prog, len(prog) + 1] for prog in progs]] for re, progs in reprogs]
-        self._2_depth = True if len(self._reprogs) > 1 else False
+        # [[re, [[prog, len(prog) + 1] for prog in progs]] for re, progs in reprogs]
+        self._reprogs = reprogs
+        self._2_depth = len(self._reprogs) > 1
         self._threads = thread_num
         self._sorted = sorted
         self._encoding = encoding
         # self._chunk_size = self._data.size() // (self._threads * 4)
         self._optional = optional
         self.daemon = False
-
 
     @classmethod
     def set_records(cls, records):
@@ -572,27 +606,40 @@ class ThreadedXMLParser: #(mp.Process):
         # import __main__
         # getattr(__main__, self._records[0])
         self.parse()
-    
 
     @staticmethod
-    def queue_iterator(q_obj):
-         while True:
+    def queue_iterator(q):
+        i = 0
+        # while True:
+        #     # if (len(q) - 1) >= i:
+        #     try:
+        #         _q = q[i]
+        #         if _q == -1:
+        #             print("All Done")
+        #             break
+
+        while True:
             try:
-                obj = q_obj.get(block=False, timeout=1e-6)
+                # obj = d[i][0].recv() #block=False, timeout=-1)
+                obj = q.get(block=False, timeout=-1)
                 if obj == -1:
                     break
-                yield from obj[-1]
+                yield from pickle.loads(obj)  #.split("\n")
+                # del q[i]
             except Empty:
-                pass
-
+                i += 1
+                # pass
+            # except KeyError:
+            #     pass
+        time.sleep(1e-6)
 
     def _chunker(self, data):
         # the file hasn't been decoded yet, can only decode in chuncks
-        
-        for m in re.finditer(self._reprogs[0][0].encode(self._encoding), data):
+
+        for m in re.finditer(self._reprogs[0][0].pattern.encode(self._encoding), data):
             yield m.start()
             # last = m.start()
-    
+
     def _grouper(self, data):
         chunk_size = data.size() // (self._threads * 4)
         start_ind = 0
@@ -601,458 +648,172 @@ class ThreadedXMLParser: #(mp.Process):
                 # print("yielding", start_ind, chunk[0])
                 yield data[start_ind:chunk_ind]
                 start_ind = chunk_ind
-        # The last chunk                
+        # The last chunk
         yield data[start_ind:chunk_ind]
 
     @staticmethod
-    def _clean_match(match, reprogs):
-        # cleaned = match.translate(ThreadedXMLParser.TABLE_REPLACE)
-        # cleaned = match[1:match.find('/>')]
-        cleaned=match
-        final = []
-        i = 0
-        for v in cleaned.split(' '):
-            split_v = v.split("=")
-            if split_v[0] in reprogs[1]:
-                # final[split_v[0]] = split_v[-1].replace('>', '')
-                final.append(split_v[-1].replace('>', ''))
-                i += 1
-            if i >= len(reprogs[1]):
-                break
-        return final
-
-    @staticmethod
-    def _parser(chunk, thread_num, q, encoding, records, reprogs, depth_2, optional, top_record=None, res=[], record_fns=None):
-
-        
+    def _parser(chunk, thread_num, q, encoding, records, reprogs, depth_2, optional, res=[], ):
+          
+        # chunk.re
         chunk = chunk.decode(encoding)
-
-        iterator = chunk.translate(ThreadedXMLParser.TABLE_REPLACE).split(reprogs[0][0])[1:]
-        # if level < 1:
-        iterator = iterator[1::2]
-        
-        if not len(iterator):
-            return 
-        # last_m = iterator[0] 
-        first_level = None
         res = []
-        for m in iterator:
-            # m.rfind('/>')
-            if reprogs[0][0][0] in chunk:
-                first_level = []
-                for v in m.split(' '):
-                    split_v = v.split("=")
-                    # if split_v[0] in reprogs[1]:
-                        # final[split_v[0]] = split_v[-1].replace('>', '')
-                    first_level.append(split_v[-1].replace('>', ''))
-                    #     # i += 1
-                    # if i >= len(reprogs[1]):
-                    #     break
-                
-                # first_level = ThreadedXMLParser._clean_match(m, reprogs[0])
-                # first_level = first_level RecordLike(**first_level)
-                if not depth_2:
-                    res.append(first_level)
+        l1 = None
+        m2 = None
 
-            if depth_2 and first_level:
-                for inner_m in m.split(reprogs[1][0])[1:]:
-                    # if reprogs[1][0] in inner_m:
-                    # second_level = ThreadedXMLParser._clean_match(inner_m, reprogs[1])
-                    # second_level = RecordLike(**second_level)
-                    second_level = []
-                    last = 0
-                    for spliter, len_splitter in reprogs[1][1]:
-                        location = inner_m[last:].find(spliter)
-                        reduced_s = inner_m[last + location + len_splitter:] 
-                        val = reduced_s[:reduced_s.find(' ')]
-                        second_level.append(val)
-                        last = location
+        l1_list = []
+        l2_list = []
 
+        for line in chunk.splitlines():
 
-
-                    # for v in inner_m.split(' '):
-                    #     split_v = v.split("=")
-                    #     if split_v[0] in reprogs[1][1]:
-                    #         second_level.append(split_v[1])
-                    # second_level = [inner_m.split("=")[1] [1:]] # if inner_m.split("=")[0] in reprogs[1][1]]
-                    if second_level:
-                        res.append((first_level, second_level))
-
-            # if level < 1 and depth_2:
-
-            #     parent = ThreadedXMLParser._clean_match(last_m, reprogs[0])
-
-            #     ThreadedXMLParser._parser(
-            #         chunk=m,
-            #         thread_num=thread_num,
-            #         q=q,
-            #         encoding=encoding,
-            #         reprogs=[reprogs[1]],
-            #         records=[records[1]],
-            #         depth_2=depth_2,
-            #         optional=optional,
-            #         level=level + 1,
-            #         top_record=parent,  #last_m.groupdict() if optional else last_m.groups(),
-            #         res=res,
-            #         record_fns=record_fns
-            #     )
-            
-            # if level >= 1:
-            #     cleaned = ThreadedXMLParser._clean_match(m, reprogs[0])
-            #     # res.append((top_record, RecordLike(**cleaned)))  # if optional else RecordLike(**{key: _x for key, _x in zip(records[1], m.groups())})))
-            #     res.append((cleaned))
-
-
-            # elif not depth_2:
-            #     cleaned = ThreadedXMLParser._clean_match(m, reprogs[0])
-            #     res.append((cleaned))  # if optional else RecordLike(**{key: _x for key, _x in zip(records[0], m.groups())})))
-            
-            # if depth_2 and level < 1:
-            #     last_m = m
-
-        # if level < 1:
-        # q.put((thread_num, res))
-        print("finished ", res[0][0])
-            # return thread_num, res    
+            if depth_2:
+                m2 = reprogs[1][0].search(line)
+                if m2 and l1:
+                    # if last_l2:
+                    #     last_l2 = set(m2.groups()) ^ set(last_l2) 
+                    # else:
+                    #     last_l2 = m2.groups()
+                    # l1_list.append(l1)
+                    # l2_list.append(m2.groups())
+                    tx = [l1, m2.groups()]
+                    # q.put_nowait((l1, m2.groups()))
+                    # tx = "|".join(map("~".join, (l1, m2.groups())))
+                    res.append(tx)
+                    # last_tx = tx
+                    # res.append(.join([*l1, "~".join(m2.groups())]))
+                    # res.append((l1, SimpleNamespace(**m2.groupdict()) if optional else SimpleNamespace(**{key: val for val, key in zip(m2.groups(), reprogs[1][1])})))
+            if not m2:
+                m1 = reprogs[0][0].search(line)
+                if m1:
+                    l1 = m1.groups()
+                    # if last_l1:
+                    #     last_l1 =  set(l1) ^ set(last_l1)
+                    # else:
+                    #     last_l1 = l1
+                    # l1 = RecordLike(**m1.groupdict()) if optional else SimpleNamespace(**{key: val for val, key in zip(m1.groups(), reprogs[0][1])})
+                    if not depth_2:
+                        res.append(l1)
+        t0 = time.time()
+        q.put(pickle.dumps(res)) #"\n".join(res))
+        # q.put_nowait(l2_list)
+        print("time to put on queue: ", time.time() - t0)
 
     def parse(self,  **kwargs):
 
         # manager = mp.Manager()
         # q = manager.Queue()
-        p = []
+        # p = []
+        # m = mp.Manager()
+        
 
         f = _open(self._file_obj, self._encoding, raw=True)
 
         chunker = self._grouper(
             mmap.mmap(
-                f.fileno(), 
+                f.fileno(),
                 0
-                )
             )
+        )
         i = 0
-        # temporary holder so that items can be returned in order
-        # results = []
-        # desired_yield = 0
-        # cleanup = False
 
-        # partial_func = functools.partial(
-        #         self._parser, 
-        #         # chunk=next(chunker), 
-        #         thread_num=i, 
-        #         q=self.q,
-        #         optional=self._optional,
-        #         encoding=self._encoding, 
-        #         reprogs=self._reprogs, 
-        #         depth_2=self._2_depth
-        #     ) 
-
-        # ps = []
-        # iterfunc = zip(partial_func, chunker)
         stop = False
         s = []
+        p = []
+        q_s = []
         while True:
             try:
                 # print(next(chunker)[:5])
-                # # s[-1] = mp.Event()
-                print("spawning process")
-                p.append(mp.Process(target=self._parser,
+                # s[-1] = mp.Event()
+                # print("spawning process")
+                # self.d.append([*mp.Pipe()])
+                # self.q[i] = manager.Queue()
+                p.append((mp.Process(target=self._parser,
                                     kwargs=dict(
-                                                chunk=next(chunker), 
-                                                thread_num=i, 
-                                                q=self.q,
-                                                optional=self._optional,
-                                                encoding=self._encoding,
-                                                records=self._records, 
-                                                reprogs=self._reprogs, 
-                                                depth_2=self._2_depth)
-                                        )
-                ) 
-                p[-1].daemon = False
-                print("created")
-                p[-1].start()
-                p[-1].join(timeout=0)
+                                        chunk=next(chunker),
+                                        thread_num=i,
+                                        q=self.q, #self.q,  #self.q,
+                                        optional=self._optional,
+                                        encoding=self._encoding,
+                                        records=self._records,
+                                        reprogs=self._reprogs,
+                                        depth_2=self._2_depth)
+                                    ),
+                                    i)
+                         )
+                p[-1][0].daemon = False
+                # print("created")
+                p[-1][0].start()
+                p[-1][0].join(timeout=0)
 
             except StopIteration:
                 stop = True
 
             while (len(p) >= self._threads) or (stop and len(p)):
-                p = [_p for _p in p if _p.is_alive()]
-                time.sleep(0.01)
- 
+                
+                # for j in [i for _p, i in p if not _p.is_alive()]:
+                #     print(j)
+                #     self.q.send_bytes(q_s[j].get()) 
+                
+                p = [_p for _p in p if _p[0].is_alive()]
+
+                # time.sleep(0.000001)
+
+            i += 1
+
             if stop:
                 break
-        
+
+        # self.d.append([*mp.Pipe()])
+
+        # self.d[-1][-1].send(-1)
         self.q.put(-1)
 
-        # with mp.Pool(self._threads) as pool:
-        #     for res in pool.map(partial_func, chunker, ):
-        #         print(res[-1][0][0])
-        #         yield from res[-1]
-                # yield 
-        # while True:
-        #     try:
-        #         p.append(
-        #             mp.Process(
-        #                 target=self._parser, 
-        #                 kwargs=dict(
-        #                     chunk=next(chunker), 
-        #                     thread_num=i, 
-        #                     q=q,
-        #                     optional=self._optional,
-        #                     encoding=self._encoding, 
-        #                     reprogs=self._reprogs, 
-        #                     depth_2=self._2_depth)
-        #             )
-        #         )
-        #         p[-1].start()
-        #         p[-1].join(timeout=0)
-        #     except StopIteration:
-        #         cleanup = True
-
-        #     # only start checking for results once max threads spooled up
-        #     while (len(p) >= self._threads) or (cleanup and len(p)):
-        #         try:
-        #             q_res = q.get(block=False, )
-        #             p.pop(q_res[0])
-        #             if sorted:
-        #                 results.append(q_res)
-        #                 # try to yield the next sequential item
-        #                 for j, item in enumerate(results):
-        #                     if item[0] == desired_yield:
-        #                         desired_yield += 1
-        #                         # check the queue again
-        #                         break
-        #                 yield from results.pop(j)[1]
-        #             else:
-        #                 yield from q_res[1]
-
-        #         except (TimeoutError, Empty):
-        #             pass
-        #     # exit condition
-        #     if cleanup and not len(p):
-        #         break
-        #         # # last_yield
-        #         # if q_res[0] == last_yield + 1:
-        #         #     results.append(q_res)
-        #         # else:
-
-        #         # else:
-        #         #     yield results.pop(q_res)
-        #     i += 1
-
-
-    # def _puller(self, ):
-
-    #     def puller(q, ):
-
-    #         try:
-    #             item = q.get(block=True, timeout=0.001)
-    #             # f.writelines(item)
-    #         except Empty:
-    #             continue
-            
-    #         # exit condition
-    #         if e.is_set() and q.empty():
-    #             break
-
-            
-    #     return puller
-
-
-
-
-# class EmissionsXML2CSV:
-
-#     """
-#     Example usage: 
-
-#         e = EmissionsXML2CSV("/home/max/tmp/_OUTPUT_emissions.xml", 20)
-#         e.convert("/home/max/tmp/_OUTPUT_emissions.csv")
-
-    
-#     Using 20 CPU cores, it reduces the time to process one 1.5 Gb emissions 
-#     output xml from ~240 seconds with $SUMO_HOME/tools/xml/xml2csv.py to ~8 seconds
-#     ~
-
-#     """
-#     TABLE_REPLACE = str.maketrans(dict.fromkeys('\r\n\t"'))
-#     TIME_PATTERN = re.compile(r'time="[\d.]+"')
-#     HEADER_ROW = ['timestep_time',
-#                    'vehicle_id',
-#                    'vehicle_eclass',
-#                    'vehicle_CO2',
-#                    'vehicle_CO',
-#                    'vehicle_HC',
-#                    'vehicle_NOx',
-#                    'vehicle_PMx',
-#                    'vehicle_fuel',
-#                    'vehicle_electricity',
-#                    'vehicle_noise',
-#                    'vehicle_route',
-#                    'vehicle_type',
-#                    'vehicle_waiting',
-#                    'vehicle_lane',
-#                    'vehicle_pos',
-#                    'vehicle_speed',
-#                    'vehicle_angle',
-#                    'vehicle_x',
-#                    'vehicle_y']
-
-#     def __init__(self, path_2_xml, num_core, chunk_size=None):
-
-#         self._data = self._mmap_xml(path_2_xml)
-#         self.cpu = num_core
-
-#         # 4x cores seems to be the best setting here
-#         self._chunk_size = self._data.size() // (self.cpu * 4) if not chunk_size else chunk_size
-
-#     def _mmap_xml(self, path_2_xml: str) -> mmap.mmap:
-#         with open(path_2_xml, 'r+') as f:
-#             return mmap.mmap(f.fileno(), 0)
-
-#     def _chunk_file(self, ) -> Iterable[int]:
-#         pattern = br"time="
-#         last = 0
-#         for m in re.finditer(pattern, self._data):
-#             yield last, m.start()
-#             last = m.start()
-
-#     def _grouper(self, n,):
-#         # chunks = self._split_list(list(self._chunk_file()), n)
-#         start_ind = 0
-#         for i, chunk in enumerate(self._chunk_file()):
-#             if ((chunk[0] - start_ind) >= self._chunk_size):
-#                 # print("yielding", start_ind, chunk[0])
-#                 yield self._data[start_ind:chunk[0]]
-#                 start_ind = chunk[0]
-       
-#         # The last chunk                
-#         yield self._data[start_ind:chunk[0]]
-
-
-#     @staticmethod
-#     def _chunk_handler(chunk, q: mp.Queue, *args, **kwargs):
-#         # data = []
-#         chunk = chunk.decode()
-#         vehicle_chunk = "<vehicle"
-#         iter_finder = EmissionsXML2CSV.TIME_PATTERN.finditer(chunk)
-#         time_obj = next(iter_finder)
-#         d = []
-#         # print("chunk start time: ", time_obj.group()[6:-1])
-#         for next_time in [*iter_finder, None]:
-#             local_time = time_obj.group()[6:-1]
-#             end = -1 if not next_time else next_time.span()[0]
-#             time_chunk = chunk[time_obj.span()[1]:end]
-#             if vehicle_chunk in time_chunk:
-#                 for vehicle in time_chunk.split(vehicle_chunk):
-#                     if 'id' in vehicle:
-#                         cleaned = vehicle.translate(EmissionsXML2CSV.TABLE_REPLACE)
-#                         cleaned = cleaned[1:cleaned.find('/>')]
-#                         parsed = [v.split("=")[1] for v in cleaned.split(' ')]
-#                         d.append(",".join([local_time] + parsed) + "\n"
-#                         )
-#             if end > 0:
-#                 time_obj = next_time
-#         # print("chunk end time: ", time_obj.group()[6:-1])
-#         q.put(d)
-
-#     @staticmethod
-#     def _q_consumer(output_csv_path: str, q: mp.Queue, e: mp.Event) -> None:
-#         with open(output_csv_path, 'w', newline='', encoding='utf-8') as f:
-#             # writer = csv.writer(f) TOO SLOW
-#             # write the header
-#             f.writelines([",".join(EmissionsXML2CSV.HEADER_ROW) + "\n"])
-
-#             while True:
-#                 try:
-#                     item = q.get(block=True, timeout=0.001)
-#                     f.writelines(item)
-#                 except Empty:
-#                     continue
-                
-#                 # exit condition
-#                 if e.is_set() and q.empty():
-#                     break
-
-#     def convert(self, path_2_csv) -> None:
-#         manager = mp.Manager()
-#         q = manager.Queue()
-#         s = manager.Event()
-#         writer_p = mp.Process(target=self._q_consumer, kwargs=dict(output_csv_path=path_2_csv, q=q, e=s))
-#         writer_p.start()
-
-#         p = []
-#         chunker = self._grouper(self.cpu)
-#         while True:
-#         # for i, g in enumerate(self._grouper(self.cpu - 2)):
-#             try:
-#                 p.append(mp.Process(target=self._chunk_handler, kwargs=dict(chunk=next(chunker), q=q)))
-#                 p[-1].start()
-#                 p[-1].join(timeout=0)
-#                 cleanup = False
-#             except StopIteration:
-#                 cleanup = True
-
-#             while True:
-                
-#                 alive_p = [(i, _p.is_alive()) for i, _p in enumerate(p)]
-
-#                 if ((
-#                         any(not alive for _, alive in alive_p)
-#                         or len(p) < (self.cpu)
-#                     ) and not cleanup) or (   
-#                         cleanup and all(not alive for _, alive in alive_p)
-#                     ):
-
-#                     break
-#                 time.sleep(0.001)
-
-#             p = [p[i] for i, alive in alive_p if alive]
-
-#             if cleanup:
-#                 # kill the writer
-#                 s.set()
-#                 writer_p.join()
-                
-#                 # EXIT
-#                 break
+        # self.q[1].close()
 
 
 if __name__ == "__main__":
 
-    
-    file_path = r"C:\Users\gle\Desktop\_OUTPUT_emissions.xml"
+    file_path = r"/home/max/tmp/_OUTPUT_emissions.xml"
 
+    # with open(r"/home/max/tmp/_OUTPUT_emissions.xml.csv", 'w') as f:
+    #     f.writelines(
+    #         (
+    #             line + "\n"
+    #             # "".join((",".join([line[0].time, *list(line[1])]), "\n")) 
 
-    with open(r"C:\Users\gle\Desktop\_OUTPUT_emissions.csv", 'w') as f:
-        f.writelines(
-            (
-                "".join((",".join([line[0]['time'], *list(line[1].values())]), "\n")) for line in parse_fast_nested(
-                    file_path,
-                    'timestep',
-                    ['time'],
-                    "vehicle",
-                    ['id',
-                    'eclass',
-                    'CO2',
-                    'CO',
-                    'HC',
-                    'NOx',
-                    'PMx',
-                    'fuel',
-                    'electricity',
-                    'noise',
-                    'route',
-                    'type',
-                    'waiting',
-                    'lane',
-                    'pos',
-                    'speed',
-                    'angle',
-                    'x',
-                    'y'
-                    ],
-                    threads=8
-                )
-            )
-        )
+    import time
+
+    t0 = time.time()
+    for line in parse_fast_nested(
+        file_path,
+        'timestep',
+        ['time'],
+        "vehicle",
+        ['id',
+            'eclass',
+            'CO2',
+            'CO',
+            'HC',
+            'NOx',
+            'PMx',
+            'fuel',
+            'electricity',
+            'noise',
+            'route',
+            'type',
+            'waiting',
+            'lane',
+            'pos',
+            'speed',
+            'angle',
+            'x',
+            'y'
+            ],
+        threads=8
+    ):
+        # tuplee = line.split("~")
+        # tuplee[0], tuplee[2]
+        float(line[0][0]) * float(line[1][0])
+    print("Total time: ", time.time() - t0)
+        # line[0].time, line[1].fuel
+        #     )
+        # )
