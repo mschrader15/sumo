@@ -52,6 +52,8 @@ public:
     static int getLastStepVehicleNumber(const std::string& detID);
     static int getLastStepHaltingNumber(const std::string& detID);
 
+    static void setDetectionEvent(const std::string& detID);
+
     LIBSUMO_ID_PARAMETER_API
     LIBSUMO_SUBSCRIPTION_API
 

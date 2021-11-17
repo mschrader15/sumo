@@ -1444,6 +1444,8 @@ MSE2Collector::reset() {
     myMaxJamInMeters = 0;
     myTimeSamples = 0;
     myMeanVehicleNumber = 0;
+
+    myFakeCount = 0;
     for (std::map<std::string, SUMOTime>::iterator i = myIntervalHaltingVehicleDurations.begin(); i != myIntervalHaltingVehicleDurations.end(); ++i) {
         (*i).second = 0;
     }
@@ -1460,7 +1462,7 @@ MSE2Collector::getCurrentVehicleNumber() const {
             result++;
         }
     }
-    return result;
+    return result + myFakeCount;
 }
 
 

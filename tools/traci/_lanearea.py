@@ -99,3 +99,10 @@ class LaneAreaDomain(Domain):
         Returns the number of vehicles which were halting during the last time step.
         """
         return self._getUniversal(tc.LAST_STEP_VEHICLE_HALTING_NUMBER, detID)
+    
+    def setDetectionEvent(self, detID):
+        """setDetectionEvent(string) -> None
+
+        Places a detector "call" on the target lane area detector
+        """
+        return self._setCmd(tc.VAR_FAKE_DETECTION, detID)

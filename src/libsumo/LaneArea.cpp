@@ -143,6 +143,11 @@ LaneArea::getDetector(const std::string& id) {
     return e2;
 }
 
+void
+LaneArea::setDetectionEvent(const std::string& detID){
+    getDetector(detID)->placeCall();
+}
+
 
 std::shared_ptr<VariableWrapper>
 LaneArea::makeWrapper() {

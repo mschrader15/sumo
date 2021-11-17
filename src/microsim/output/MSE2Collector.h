@@ -517,6 +517,11 @@ public:
     /** @brief Remove all vehicles before quick-loading state */
     virtual void clearState();
 
+    // @brief Place a fake detector call on traffic light
+    void placeCall() {
+        myFakeCount = 1;
+    };
+
 private:
 
     /** @brief checks whether the vehicle stands in a jam
@@ -771,7 +776,8 @@ private:
     /// @brief The number of halted vehicles [#]
     int myCurrentHaltingsNumber;
     /// @}
-
+    /// @brief A variable for "faking" a detector call
+    int myFakeCount;
 
 private:
     /// @brief Invalidated copy constructor.

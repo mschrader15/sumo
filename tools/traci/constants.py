@@ -1312,6 +1312,9 @@ VAR_TRACK_VEHICLE = 0xa6
 #  presence of view
 VAR_HAS_VIEW = 0xa7
 
+#  place a fake detector call on lane area detector
+VAR_FAKE_DETECTION = 0x22;
+
 # @name currently wanted lane-change action
 # @{
 # @brief No action desired

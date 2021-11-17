@@ -1329,6 +1329,9 @@ TRACI_CONST int VAR_TRACK_VEHICLE = 0xa6;
 
 // presence of view
 TRACI_CONST int VAR_HAS_VIEW = 0xa7;
+\
+// fake a detector call (set: e2 or LaneArea Detector)
+TRACI_CONST int VAR_FAKE_DETECTION = 0x22;
 
 } // namespace libsumo
 
