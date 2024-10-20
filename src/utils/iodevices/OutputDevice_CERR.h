@@ -33,6 +33,7 @@
  */
 class OutputDevice_CERR : public OutputDevice {
 public:
+    using StreamDeviceType_ = OStreamDevice;
     /** @brief Returns the single cerr instance
      *
      * Creates and returns the cerr device.
@@ -41,20 +42,12 @@ public:
 
 
 protected:
-    /// @name Methods that override/implement OutputDevice-methods
-    /// @{
-
-    /** @brief Returns the associated ostream
-     * @return cerr
-     */
-    std::ostream& getOStream();
-
 
     /** @brief Called after every write access.
      *
      * Calls flush on stderr.
      */
-    virtual void postWriteHook();
+    virtual void postWriteHook() override;
     /// @}
 
 

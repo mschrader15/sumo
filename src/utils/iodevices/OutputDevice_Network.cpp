@@ -39,6 +39,7 @@
 // ==========================================================================
 OutputDevice_Network::OutputDevice_Network(const std::string& host,
         const int port) : OutputDevice(0, host + ":" + toString(port)) {
+    myStreamDevice = std::make_unique<OStreamDevice>(new std::ostringstream());
     mySocket = new tcpip::Socket(host, port);
     for (int wait = 1; wait < 10; wait += 1) {
         try {
@@ -59,17 +60,12 @@ OutputDevice_Network::~OutputDevice_Network() {
     delete mySocket;
 }
 
-
-std::ostream&
-OutputDevice_Network::getOStream() {
-    return myMessage;
-}
-
-
 void
 OutputDevice_Network::postWriteHook() {
-    const std::string toSend = myMessage.str();
-    myMessage.str("");
+    auto& stringStream = getStreamDevice<OStreamDevice>(myStreamDevice);
+    
+    const std::string toSend = stringStream.str();
+
     if (toSend.empty() || !mySocket->has_client_connection()) {
         return;
     }

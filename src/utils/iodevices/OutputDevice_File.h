@@ -37,6 +37,9 @@
  */
 class OutputDevice_File : public OutputDevice {
 public:
+    using StreamDeviceType_ = OStreamDevice;
+    using StreamDevicePtr = std::unique_ptr<StreamDeviceType_>;
+
     /** @brief Constructor
      * @param[in] fullName The name of the output file to use
      * @param[in] compressed whether to apply gzip compression
@@ -46,7 +49,7 @@ public:
 
 
     /// @brief Destructor
-    ~OutputDevice_File();
+    ~OutputDevice_File() = default;
 
     /** @brief returns the information whether the device will discard all output
      * @return Whether the device redirects to /dev/null
@@ -56,20 +59,7 @@ public:
     }
 
 
-protected:
-    /// @name Methods that override/implement OutputDevice-methods
-    /// @{
-
-    /** @brief Returns the associated ostream
-     * @return The used stream
-     */
-    std::ostream& getOStream() override;
-    /// @}
-
-
 private:
-    /// The wrapped ofstream
-    std::ostream* myFileStream = nullptr;
 
     /// am I redirecting to /dev/null
     bool myAmNull = false;

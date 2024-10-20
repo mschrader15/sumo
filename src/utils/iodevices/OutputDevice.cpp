@@ -74,27 +74,32 @@ OutputDevice::getDevice(const std::string& name, bool usePrefix) {
     // check whether the device shall print to stdout
     if (name == "stdout") {
         dev = OutputDevice_COUT::getDevice();
-    } else if (name == "stderr") {
+    }
+    else if (name == "stderr") {
         dev = OutputDevice_CERR::getDevice();
-    } else if (FileHelpers::isSocket(name)) {
+    }
+    else if (FileHelpers::isSocket(name)) {
         try {
             const bool ipv6 = name[0] == '[';  // IPv6 adresses may be written like '[::1]:8000'
             const size_t sepIndex = name.find(":", ipv6 ? name.find("]") : 0);
             const int port = StringUtils::toInt(name.substr(sepIndex + 1));
             dev = new OutputDevice_Network(ipv6 ? name.substr(1, sepIndex - 2) : name.substr(0, sepIndex), port);
-        } catch (NumberFormatException&) {
+        }
+        catch (NumberFormatException&) {
             throw IOError("Given port number '" + name.substr(name.find(":") + 1) + "' is not numeric.");
-        } catch (EmptyData&) {
+        }
+        catch (EmptyData&) {
             throw IOError(TL("No port number given."));
         }
-    } else {
+    }
+    else {
         std::string name2 = (name == "nul" || name == "NUL") ? "/dev/null" : name;
         if (usePrefix && OptionsCont::getOptions().isSet("output-prefix") && name2 != "/dev/null") {
             std::string prefix = OptionsCont::getOptions().getString("output-prefix");
             const std::string::size_type metaTimeIndex = prefix.find("TIME");
             if (metaTimeIndex != std::string::npos) {
                 const time_t rawtime = std::chrono::system_clock::to_time_t(OptionsIO::getLoadTime());
-                char buffer [80];
+                char buffer[80];
                 struct tm* timeinfo = localtime(&rawtime);
                 strftime(buffer, 80, "%Y-%m-%d-%H-%M-%S", timeinfo);
                 prefix.replace(metaTimeIndex, 4, buffer);
@@ -106,7 +111,7 @@ OutputDevice::getDevice(const std::string& name, bool usePrefix) {
         dev = new OutputDevice_File(name2, len > 3 && name.substr(len - 3) == ".gz");
     }
     dev->setPrecision();
-    dev->getOStream() << std::setiosflags(std::ios::fixed);
+    (*dev) << std::setiosflags(std::ios::fixed);
     myOutputDevices[name] = dev;
     return *dev;
 }
@@ -114,8 +119,8 @@ OutputDevice::getDevice(const std::string& name, bool usePrefix) {
 
 bool
 OutputDevice::createDeviceByOption(const std::string& optionName,
-                                   const std::string& rootElement,
-                                   const std::string& schemaFile) {
+    const std::string& rootElement,
+    const std::string& schemaFile) {
     if (!OptionsCont::getOptions().isSet(optionName)) {
         return false;
     }
@@ -152,14 +157,16 @@ OutputDevice::closeAll(bool keepErrorRetrievers) {
     for (std::map<std::string, OutputDevice*>::iterator i = myOutputDevices.begin(); i != myOutputDevices.end(); ++i) {
         if (MsgHandler::getErrorInstance()->isRetriever(i->second)) {
             errorDevices.push_back(i->second);
-        } else {
+        }
+        else {
             nonErrorDevices.push_back(i->second);
         }
     }
     for (OutputDevice* const dev : nonErrorDevices) {
         try {
             dev->close();
-        } catch (const IOError& e) {
+        }
+        catch (const IOError& e) {
             WRITE_ERROR(TL("Error on closing output devices."));
             WRITE_ERROR(e.what());
         }
@@ -168,7 +175,8 @@ OutputDevice::closeAll(bool keepErrorRetrievers) {
         for (OutputDevice* const dev : errorDevices) {
             try {
                 dev->close();
-            } catch (const IOError& e) {
+            }
+            catch (const IOError& e) {
                 std::cerr << "Error on closing error output devices." << std::endl;
                 std::cerr << e.what() << std::endl;
             }
@@ -190,7 +198,8 @@ OutputDevice::realString(const double v, const int precision) {
     }
     if (fabs(v) < pow(10., -precision)) {
         oss.setf(std::ios::scientific, std::ios::floatfield);
-    } else {
+    }
+    else {
         oss.setf(std::ios::fixed, std::ios::floatfield);     // use decimal format
         oss.setf(std::ios::showpoint);    // print decimal point
         oss << std::setprecision(precision);
@@ -215,7 +224,8 @@ OutputDevice::~OutputDevice() {
 
 bool
 OutputDevice::ok() {
-    return getOStream().good();
+    // write a visitor lambda to check if the stream is ok
+    return std::visit([](auto&& arg) { return arg->ok(); }, myStreamDevice);
 }
 
 
@@ -240,46 +250,46 @@ OutputDevice::close() {
 
 void
 OutputDevice::setPrecision(int precision) {
-    getOStream() << std::setprecision(precision);
+    myStreamDevice << std::setprecision(precision);
 }
 
 
 int
 OutputDevice::precision() {
-    return (int)getOStream().precision();
+    return std::visit([](auto&& arg) { return arg->precision(); }, myStreamDevice);
 }
 
 
 bool
 OutputDevice::writeXMLHeader(const std::string& rootElement,
-                             const std::string& schemaFile,
-                             std::map<SumoXMLAttr, std::string> attrs,
-                             bool includeConfig) {
+    const std::string& schemaFile,
+    std::map<SumoXMLAttr, std::string> attrs,
+    bool includeConfig) {
     if (schemaFile != "") {
         attrs[SUMO_ATTR_XMLNS] = "http://www.w3.org/2001/XMLSchema-instance";
         attrs[SUMO_ATTR_SCHEMA_LOCATION] = "http://sumo.dlr.de/xsd/" + schemaFile;
     }
-    return myFormatter->writeXMLHeader(getOStream(), rootElement, attrs, includeConfig);
+    return myFormatter->writeXMLHeader(myStreamDevice, rootElement, attrs, includeConfig);
 }
 
 
 OutputDevice&
 OutputDevice::openTag(const std::string& xmlElement) {
-    myFormatter->openTag(getOStream(), xmlElement);
+    myFormatter->openTag(myStreamDevice, xmlElement);
     return *this;
 }
 
 
 OutputDevice&
 OutputDevice::openTag(const SumoXMLTag& xmlElement) {
-    myFormatter->openTag(getOStream(), xmlElement);
+    myFormatter->openTag(myStreamDevice, xmlElement);
     return *this;
 }
 
 
 bool
 OutputDevice::closeTag(const std::string& comment) {
-    if (myFormatter->closeTag(getOStream(), comment)) {
+    if (myFormatter->closeTag(myStreamDevice, comment)) {
         postWriteHook();
         return true;
     }
@@ -294,9 +304,10 @@ OutputDevice::postWriteHook() {}
 void
 OutputDevice::inform(const std::string& msg, const bool progress) {
     if (progress) {
-        getOStream() << msg;
-    } else {
-        getOStream() << msg << '\n';
+        myStreamDevice << msg;
+    }
+    else {
+        myStreamDevice << msg << '\n';
     }
     postWriteHook();
 }

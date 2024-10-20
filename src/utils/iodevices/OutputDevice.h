@@ -29,6 +29,7 @@
 #include <utils/common/ToString.h>
 #include <utils/xml/SUMOXMLDefinitions.h>
 #include "PlainXMLFormatter.h"
+#include "StreamDevices.h"
 
 
 // ===========================================================================
@@ -175,7 +176,7 @@ public:
     /** @brief Returns the precision of the underlying stream
      */
     int getPrecision() {
-        return (int)getOStream().precision();
+        return precision();
     }
 
     /** @brief Writes an XML header with optional configuration
@@ -197,7 +198,7 @@ public:
 
     template <typename E>
     bool writeHeader(const SumoXMLTag& rootElement) {
-        return static_cast<PlainXMLFormatter*>(myFormatter)->writeHeader(getOStream(), rootElement);
+        return static_cast<PlainXMLFormatter*>(myFormatter)->writeHeader(myStreamDevice, rootElement);
     }
 
 
@@ -240,7 +241,7 @@ public:
     /** @brief writes a line feed if applicable
      */
     void lf() {
-        getOStream() << "\n";
+        myStreamDevice << "\n";
     }
 
 
@@ -252,7 +253,7 @@ public:
      */
     template <typename T>
     OutputDevice& writeAttr(const SumoXMLAttr attr, const T& val) {
-        PlainXMLFormatter::writeAttr(getOStream(), attr, val);
+        PlainXMLFormatter::writeAttr(myStreamDevice, attr, val);
         return *this;
     }
 
@@ -271,7 +272,7 @@ public:
     OutputDevice& writeOptionalAttr(const SumoXMLAttr attr, const T& val, long long int attributeMask) {
         assert((int)attr <= 63);
         if (attributeMask == 0 || useAttribute(attr, attributeMask)) {
-            PlainXMLFormatter::writeAttr(getOStream(), attr, val);
+            PlainXMLFormatter::writeAttr(myStreamDevice, attr, val);
         }
         return *this;
     }
@@ -279,7 +280,7 @@ public:
     OutputDevice& writeOptionalAttr(const SumoXMLAttr attr, const T& val, SumoXMLAttrMask attributeMask) {
         assert((int)attr <= (int)attributeMask.size());
         if (attributeMask.none() || useAttribute(attr, attributeMask)) {
-            PlainXMLFormatter::writeAttr(getOStream(), attr, val);
+            PlainXMLFormatter::writeAttr(myStreamDevice, attr, val);
         }
         return *this;
     }
@@ -293,7 +294,7 @@ public:
      */
     template <typename T>
     OutputDevice& writeAttr(const std::string& attr, const T& val) {
-        PlainXMLFormatter::writeAttr(getOStream(), attr, val);
+        PlainXMLFormatter::writeAttr(myStreamDevice, attr, val);
         return *this;
     }
 
@@ -317,13 +318,13 @@ public:
      * @return The OutputDevice for further processing
      */
     OutputDevice& writePreformattedTag(const std::string& val) {
-        myFormatter->writePreformattedTag(getOStream(), val);
+        myFormatter->writePreformattedTag(myStreamDevice, val);
         return *this;
     }
 
     /// @brief writes padding (ignored for binary output)
     OutputDevice& writePadding(const std::string& val) {
-        myFormatter->writePadding(getOStream(), val);
+        myFormatter->writePadding(myStreamDevice, val);
         return *this;
     }
 
@@ -341,13 +342,13 @@ public:
      */
     template <class T>
     OutputDevice& operator<<(const T& t) {
-        getOStream() << t;
+        myStreamDevice << t;
         postWriteHook();
         return *this;
     }
 
     void flush() {
-        getOStream().flush();
+        return std::visit([](auto&& arg) { return arg->flush(); }, myStreamDevice);
     }
 
     bool wroteHeader() const {
@@ -355,10 +356,6 @@ public:
     }
 
 protected:
-    /// @brief Returns the associated ostream
-    virtual std::ostream& getOStream() = 0;
-
-
     /** @brief Called after every write access.
      *
      * Default implementation does nothing.
@@ -375,6 +372,8 @@ private:
 
 protected:
     const std::string myFilename;
+    // @brief the Output Device
+    StreamDeviceType myStreamDevice;
 
 private:
     /// @brief The formatter for XML
