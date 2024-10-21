@@ -47,6 +47,7 @@ OutputDevice_COUT::getDevice() {
 // method definitions
 // ===========================================================================
 OutputDevice_COUT::OutputDevice_COUT() : OutputDevice(0, "COUT") {
+    myStreamDevice = std::make_unique<OStreamDevice>(std::cout);
 }
 
 
@@ -55,15 +56,12 @@ OutputDevice_COUT::~OutputDevice_COUT() {
 }
 
 
-std::ostream&
-OutputDevice_COUT::getOStream() {
-    return std::cout;
-}
-
-
 void
 OutputDevice_COUT::postWriteHook() {
-    std::cout.flush();
+    // visitor to flush the stream
+    std::visit([](auto&& arg) {
+        arg->flush();
+    }, myStreamDevice);
 }
 
 

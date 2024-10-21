@@ -64,17 +64,6 @@ protected:
     /// @name Methods that override/implement OutputDevice-methods
     /// @{
 
-    /** @brief Returns the associated ostream
-     *
-     * The stream is an ostringstream, actually, into which the message
-     *  is written. It is sent when postWriteHook is called.
-     *
-     * @return The used stream
-     * @see postWriteHook
-     */
-    std::ostream& getOStream();
-
-
     /** @brief Sends the data which was written to the string stream over the socket.
      *
      * Converts the stored message into a vector of chars and sends them via to
@@ -84,8 +73,6 @@ protected:
     /// @}
 
 private:
-    /// @brief packet buffer
-    std::ostringstream myMessage;
 
     /// @brief the socket to transfer the data
     tcpip::Socket* mySocket;

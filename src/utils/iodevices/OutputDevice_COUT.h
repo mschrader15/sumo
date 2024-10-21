@@ -44,12 +44,6 @@ protected:
     /// @name Methods that override/implement OutputDevice-methods
     /// @{
 
-    /** @brief Returns the associated ostream
-     * @return cout
-     */
-    std::ostream& getOStream();
-
-
     /** @brief Called after every write access.
      *
      * Calls flush on stdout.
