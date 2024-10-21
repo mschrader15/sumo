@@ -98,42 +98,30 @@ public:
     /// @param flags the flags to set
     virtual void setOSFlags(std::ios_base::fmtflags flags) = 0;
 
-    /// @brief allow raw output
-    bool allowRaw() const {
-        return rawWriteAccess;
-    }
-
-
 protected:
-    /// @brief allow raw write access
-    bool rawWriteAccess = false;
-
     // my Stream type
     std::unique_ptr<T> myStream;
 
 };
 
 class OStreamDevice : public StreamDevice<std::ostream, OStreamDevice> {
-private:
-    std::ostream& stream_ref;
 
 public:
-    // Constructor taking a reference (stores a reference to the stream)
+    // // Constructor taking a reference (stores a reference to the stream)
     OStreamDevice(std::ostream& stream)
-        : StreamDevice<std::ostream, OStreamDevice>(&stream), stream_ref(stream) {}
+        : StreamDevice<std::ostream, OStreamDevice>(&stream){}
 
     // Constructor taking a pointer (takes ownership)
     OStreamDevice(std::ostream* stream)
-        : StreamDevice<std::ostream, OStreamDevice>(stream), stream_ref(*stream) {}
+        : StreamDevice<std::ostream, OStreamDevice>(stream) {}
 
     // Constructor accepting a unique_ptr to std::ostream (transfers ownership)
     OStreamDevice(std::unique_ptr<std::ostream> stream)
-        : StreamDevice<std::ostream, OStreamDevice>(std::move(stream)), stream_ref(*myStream) {}
+        : StreamDevice<std::ostream, OStreamDevice>(std::move(stream)) {}
 
     // Default constructor (creates a new ostringstream)
     OStreamDevice()
-        : StreamDevice<std::ostream, OStreamDevice>(std::make_unique<std::ostringstream>()),
-        stream_ref(*myStream) {}
+        : StreamDevice<std::ostream, OStreamDevice>(std::make_unique<std::ostringstream>()) {}
 
     // Copy constructor is deleted because std::ostream is not copyable
     OStreamDevice(const OStreamDevice&) = delete;
@@ -141,18 +129,18 @@ public:
 
     std::string str() {
         // Use dynamic_cast to check if it's an ostringstream
-        if (auto* oss = dynamic_cast<std::ostringstream*>(&stream_ref)) {
+        if (auto* oss = dynamic_cast<std::ostringstream*>(myStream.get())) {
             return oss->str();
         }
 
         // If not ostringstream, try to use the streambuf
         std::ostringstream ss;
-        ss << stream_ref.rdbuf();
+        ss << myStream->rdbuf();
         return ss.str();
     }
 
     void str(const std::string& s) override {
-        if (auto* oss = dynamic_cast<std::ostringstream*>(&stream_ref)) {
+        if (auto* oss = dynamic_cast<std::ostringstream*>(myStream.get())) {
             oss->str(s);
         }
         else {
@@ -161,25 +149,25 @@ public:
     }
 
     operator std::ostream& () override {
-        return stream_ref;
+        return *myStream;
     }
 
     // overloading the endLine method
     OStreamDevice& endLine() override {
-        stream_ref << std::endl;
+        (*myStream) << std::endl;
         return *this;
     }
 
     // overload the set iosflags method
     void setOSFlags(std::ios_base::fmtflags flags) override {
-        stream_ref.setf(flags);
+        myStream->setf(flags);
     }
 
 
     // The write method is implemented in the base class
     template <typename T>
     void writeImpl(T& t) {
-        stream_ref << t;
+        (*myStream) << t;
     }
 };
 
