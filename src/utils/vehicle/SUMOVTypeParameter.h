@@ -1,6 +1,6 @@
 /****************************************************************************/
 // Eclipse SUMO, Simulation of Urban MObility; see https://eclipse.dev/sumo
-// Copyright (C) 2001-2024 German Aerospace Center (DLR) and others.
+// Copyright (C) 2001-2025 German Aerospace Center (DLR) and others.
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
 // https://www.eclipse.org/legal/epl-2.0/
@@ -177,6 +177,12 @@ public:
 
         /// @brief the number of doors per carriage
         int carriageDoors;
+
+        /// @brief the width of the carriage doors
+        double carriageDoorWidth;
+
+        /// @brief the maximum distance between platform and train
+        double maxPlatformDistance;
 
         /// @brief the lateral alignment procedure
         LatAlignmentDefinition latAlignmentProcedure;
@@ -365,13 +371,23 @@ public:
     /// @brief The vehicle type's minimum lateral gap [m]
     double minGapLat;
 
-    /// @brief the length of train carriages and locomotive
+    /// @brief the length of train carriages
     double carriageLength;
+
+    /// @brief the length of the locomotive
     double locomotiveLength;
+
+    /// @brief the length of the gap between carriages
     double carriageGap;
 
     /// @brief the number of doors per carriage
     int carriageDoors;
+
+    /// @brief the width of the carriage doors
+    double carriageDoorWidth;
+
+    /// @brief the maximum distance between platform and train
+    double maxPlatformDistance;
 
     /// @brief the custom time-to-teleport for this type
     SUMOTime timeToTeleport;

@@ -1,6 +1,6 @@
 /****************************************************************************/
 // Eclipse SUMO, Simulation of Urban MObility; see https://eclipse.dev/sumo
-// Copyright (C) 2007-2024 German Aerospace Center (DLR) and others.
+// Copyright (C) 2007-2025 German Aerospace Center (DLR) and others.
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
 // https://www.eclipse.org/legal/epl-2.0/
@@ -759,6 +759,9 @@ TRACI_CONST int VAR_INTERVAL_NUMBER = 0x25;
 // get aggregated vehicle ids (get: inductionloop)
 TRACI_CONST int VAR_INTERVAL_IDS = 0x26;
 
+// get aggregated vehicle ids (get: inductionloop)
+TRACI_CONST int VAR_INTERVAL_TIMELOSS = 0x34;
+
 // get aggregated speed of last written interval (get: inductionloop, e2)
 TRACI_CONST int VAR_LAST_INTERVAL_OCCUPANCY = 0x27;
 
@@ -791,6 +794,9 @@ TRACI_CONST int VAR_LAST_INTERVAL_MEAN_HALTING_NUMBER = 0x20;
 
 // last interval vehicle count(get: e3)
 TRACI_CONST int VAR_LAST_INTERVAL_VEHICLE_NUMBER = 0x21;
+
+// last interval vehicle count(get: e2, e3)
+TRACI_CONST int VAR_LAST_INTERVAL_TIMELOSS = 0x35;
 
 // last interval vehicle count(set, get: e1, e2)
 TRACI_CONST int VAR_VIRTUAL_DETECTION = 0x22;
@@ -1022,6 +1028,12 @@ TRACI_CONST int VAR_LANE_ID = 0x51;
 
 // lane index (get: vehicle, edge)
 TRACI_CONST int VAR_LANE_INDEX = 0x52;
+
+// segment id (get: vehicle)
+TRACI_CONST int VAR_SEGMENT_ID = 0xa1;
+
+// segment index (get: vehicle)
+TRACI_CONST int VAR_SEGMENT_INDEX = 0xa2;
 
 // route id (get & set: vehicles)
 TRACI_CONST int VAR_ROUTE_ID = 0x53;
@@ -1362,7 +1374,7 @@ TRACI_CONST int VAR_PARAMETER_WITH_KEY = 0x3e;
 // add an instance (poi, polygon, vehicle, person, route, gui)
 TRACI_CONST int ADD = 0x80;
 
-// remove an instance (poi, polygon, vehicle, person, gui)
+// remove an instance (poi, polygon, vehicle, person, gui, route)
 TRACI_CONST int REMOVE = 0x81;
 
 // copy an instance (vehicle type, other TBD.)
@@ -1463,6 +1475,9 @@ TRACI_CONST int VAR_CS_CHARGE_IN_TRANSIT = 0x99;
 
 // charging station power
 TRACI_CONST int VAR_CS_CHARGE_DELAY = 0x9a;
+
+// parking area access permissions
+TRACI_CONST int VAR_ACCESS_BADGE = 0x9b;
 
 } // namespace libsumo
 

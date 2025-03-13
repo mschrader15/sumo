@@ -1,6 +1,6 @@
 /****************************************************************************/
 // Eclipse SUMO, Simulation of Urban MObility; see https://eclipse.dev/sumo
-// Copyright (C) 2014-2024 German Aerospace Center (DLR) and others.
+// Copyright (C) 2014-2025 German Aerospace Center (DLR) and others.
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
 // https://www.eclipse.org/legal/epl-2.0/
@@ -54,7 +54,6 @@ const int MSPModel_JuPedSim::GEOS_QUADRANT_SEGMENTS = 16;
 const double MSPModel_JuPedSim::GEOS_MITRE_LIMIT = 5.0;
 const double MSPModel_JuPedSim::GEOS_MIN_AREA = 1;
 const double MSPModel_JuPedSim::GEOS_BUFFERED_SEGMENT_WIDTH = 0.5 * SUMO_const_laneWidth;
-const double MSPModel_JuPedSim::CARRIAGE_RAMP_LENGTH = 2.0;
 const RGBColor MSPModel_JuPedSim::PEDESTRIAN_NETWORK_COLOR = RGBColor(179, 217, 255, 255);
 const RGBColor MSPModel_JuPedSim::PEDESTRIAN_NETWORK_CARRIAGES_AND_RAMPS_COLOR = RGBColor(255, 217, 179, 255);
 const std::string MSPModel_JuPedSim::PEDESTRIAN_NETWORK_ID = "jupedsim.pedestrian_network";
@@ -304,7 +303,7 @@ MSPModel_JuPedSim::add(MSTransportable* person, MSStageMoving* stage, SUMOTime n
                                 waitingStage = myCrossingWaits[crossing].second;
                             }
                         } else {
-                            throw ProcessError(TLF("No waiting set for crossing at %.", person->getID(), person->getEdge()->getID(), time2string(SIMSTEP)));
+                            throw ProcessError(TLF("No waiting set for crossing at %.", ce->getID()));
                         }
                     }
                 }
@@ -390,6 +389,7 @@ MSPModel_JuPedSim::remove(MSTransportableStateAdapter* state) {
     if (pstate->getLane() != nullptr) {
         auto& peds = myActiveLanes[pstate->getLane()];
         peds.erase(std::find(peds.begin(), peds.end(), pstate));
+        pstate->setLane(nullptr);
     }
     if (pstate->getStage() != nullptr) {
         pstate->getStage()->setPState(nullptr);  // we need to remove the old state reference to avoid double deletion
@@ -426,8 +426,8 @@ MSPModel_JuPedSim::execute(SUMOTime time) {
             continue;
         }
 
-        MSPerson* person = state->getPerson();
-        MSStageWalking* stage = dynamic_cast<MSStageWalking*>(person->getCurrentStage());
+        MSPerson* const person = state->getPerson();
+        MSStageWalking* const stage = dynamic_cast<MSStageWalking*>(person->getCurrentStage());
         if (stage == nullptr) {
             // It seems we kept the state for another stage but the new stage is not a walk.
             // So let's remove the state because after the new stage we will be elsewhere and need to be reinserted for JuPedSim anyway.
@@ -450,6 +450,7 @@ MSPModel_JuPedSim::execute(SUMOTime time) {
         Position newPosition(position.x, position.y);
         ConstMSEdgeVector route = stage->getEdges();
         const int routeIndex = (int)(stage->getRouteStep() - stage->getRoute().begin());
+        const double oldLanePos = state->getEdgePos(time);
         ConstMSEdgeVector forwardRoute = ConstMSEdgeVector(route.begin() + routeIndex, route.end());
         double bestDistance = std::numeric_limits<double>::max();
         MSLane* candidateLane = nullptr;
@@ -528,6 +529,7 @@ MSPModel_JuPedSim::execute(SUMOTime time) {
                 JPS_WaitingSetProxy_SetWaitingSetState(proxy, open ? JPS_WaitingSet_Inactive : JPS_WaitingSet_Active);
             }
         }
+        stage->activateMoveReminders(person, oldLanePos, state->getEdgePos(time), state->getSpeed(*stage));
         // In the worst case during one SUMO step the person touches the waypoint radius and walks immediately into a different direction,
         // but at some simstep it should have a maximum distance of v * delta_t / 2 to the waypoint circle.
         const double slack = person->getMaxSpeed() * TS / 2. + POSITION_EPS;
@@ -638,6 +640,7 @@ MSPModel_JuPedSim::execute(SUMOTime time) {
             std::vector<GEOSGeometry*> rampPolygons;
             for (const MSVehicle* train : allStoppedTrains) {
                 if (train->getLeavingPersonNumber() > 0) {
+                    const SUMOVTypeParameter& vTypeParam = train->getVehicleType().getParameter();
                     MSTrainHelper trainHelper = MSTrainHelper(train);
                     trainHelper.computeDoorPositions();
                     const std::vector<MSTrainHelper::Carriage*>& carriages = trainHelper.getCarriages();
@@ -657,8 +660,8 @@ MSPModel_JuPedSim::execute(SUMOTime time) {
                         carriageShape.push_back(carriage->front - perp * p);
                         carriagePolygons.push_back(createGeometryFromShape(carriageShape));
                         // Create ramps geometry.
-                        p += CARRIAGE_RAMP_LENGTH;
-                        const double d = 0.5 * MSTrainHelper::CARRIAGE_DOOR_WIDTH;
+                        p += vTypeParam.maxPlatformDistance;
+                        const double d = 0.5 * vTypeParam.carriageDoorWidth;
                         for (const Position& door : carriage->doorPositions) {
                             PositionVector rampShape;
                             rampShape.push_back(door - perp * p + dir * d);
@@ -977,7 +980,7 @@ void
 MSPModel_JuPedSim::preparePolygonForDrawing(const GEOSGeometry* polygon, const std::string& polygonId, const RGBColor& color) {
     const GEOSGeometry* exterior = GEOSGetExteriorRing(polygon);
     bool added = myShapeContainer.addPolygon(polygonId, std::string("jupedsim.pedestrian_network"), color, 10.0, 0.0,
-                 std::string(), false, convertToSUMOPoints(exterior), false, true, 1.0);
+                 std::string(), convertToSUMOPoints(exterior), false, true, 1.0);
     if (added) {
         std::vector<PositionVector> holes;
         int nbrInteriorRings = GEOSGetNumInteriorRings(polygon);
@@ -1079,6 +1082,7 @@ MSPModel_JuPedSim::dumpGeometry(const GEOSGeometry* polygon, const std::string& 
     std::ofstream dumpFile;
     dumpFile.open(filename);
     GEOSWKTWriter* writer = GEOSWKTWriter_create();
+    GEOSWKTWriter_setRoundingPrecision(writer, gPrecisionGeo);
     char* wkt = GEOSWKTWriter_write(writer, polygonGeoCoordinates == nullptr ? polygon : polygonGeoCoordinates);
     dumpFile << wkt << std::endl;
     dumpFile.close();
@@ -1110,10 +1114,8 @@ MSPModel_JuPedSim::addWaitingSet(const MSLane* const crossing, const bool entry)
         moved.move2side(latOff);
         pv.push_back(moved.positionAtOffset(lonOffset));
         moved.move2side(-2. * latOff);
-        const Position wPosOff2 = moved.positionAtOffset(lonOffset);
         pv.push_back(moved.positionAtOffset(lonOffset));
     }
-    Position center = Position::INVALID;
     if (entry && crossing->getIncomingLanes().size() == 1 && crossing->getIncomingLanes().front().lane->isWalkingArea()) {
         pv.push_back(crossing->getIncomingLanes().front().lane->getShape().getCentroid());
     }
@@ -1297,13 +1299,13 @@ MSPModel_JuPedSim::PState::~PState() {
 }
 
 
-void MSPModel_JuPedSim::PState::setPosition(double x, double y) {
+void MSPModel_JuPedSim::PState::setPosition(const double x, const double y, const double z) {
     if (myRemoteXYPos != Position::INVALID) {
-        mySpeed = myRemoteXYPos.distanceTo2D(Position(x, y)) / STEPS2TIME(DELTA_T);
+        mySpeed = myRemoteXYPos.distanceTo2D(Position(x, y, z)) / STEPS2TIME(DELTA_T);
     } else {
         mySpeed = 0.;
     }
-    myRemoteXYPos.set(x, y);
+    myRemoteXYPos.set(x, y, z);
 }
 
 

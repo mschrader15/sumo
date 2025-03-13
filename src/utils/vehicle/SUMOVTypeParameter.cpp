@@ -1,6 +1,6 @@
 /****************************************************************************/
 // Eclipse SUMO, Simulation of Urban MObility; see https://eclipse.dev/sumo
-// Copyright (C) 2001-2024 German Aerospace Center (DLR) and others.
+// Copyright (C) 2001-2025 German Aerospace Center (DLR) and others.
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
 // https://www.eclipse.org/legal/epl-2.0/
@@ -48,8 +48,12 @@ std::set<SumoXMLAttr> SUMOVTypeParameter::AllowedJMAttrs({
     SUMO_ATTR_JM_IGNORE_JUNCTION_FOE_PROB,
     SUMO_ATTR_JM_SIGMA_MINOR,
     SUMO_ATTR_JM_STOPLINE_GAP,
+    SUMO_ATTR_JM_STOPLINE_GAP_MINOR,
     SUMO_ATTR_JM_TIMEGAP_MINOR,
+    SUMO_ATTR_JM_EXTRA_GAP,
+    SUMO_ATTR_JM_ADVANCE,
     SUMO_ATTR_JM_STOPSIGN_WAIT,
+    SUMO_ATTR_JM_ALLWAYSTOP_WAIT,
 });
 
 
@@ -63,11 +67,11 @@ SUMOVTypeParameter::VClassDefaultValues::VClassDefaultValues(SUMOVehicleClass vc
     minGapLat(0.6),
     maxSpeed(200. / 3.6),
     desiredMaxSpeed(10000 / 3.6), // backward-compatibility: do not influence speeds by default
-    width(1.8),
-    height(1.5),
+    width(DEFAULT_VEH_WIDTH),
+    height(DEFAULT_VEH_HEIGHT),
     shape(SUMOVehicleShape::UNKNOWN),
     emissionClass(PollutantsInterface::getClassByName(EMPREFIX + "PC_G_EU4", vclass)),
-    mass(1500.),
+    mass(DEFAULT_VEH_MASS),
     speedFactor("normc", 1.0, 0.0, 0.2, 2.0),
     personCapacity(4),
     containerCapacity(0),
@@ -75,6 +79,8 @@ SUMOVTypeParameter::VClassDefaultValues::VClassDefaultValues(SUMOVehicleClass vc
     carriageLength(-1),
     locomotiveLength(-1),
     carriageDoors(2),
+    carriageDoorWidth(1.5),
+    maxPlatformDistance(3.),
     latAlignmentProcedure(LatAlignmentDefinition::CENTER) {
     // update default values
     switch (vclass) {
@@ -336,8 +342,10 @@ SUMOVTypeParameter::SUMOVTypeParameter(const std::string& vtid, const SUMOVehicl
       latAlignmentProcedure(LatAlignmentDefinition::CENTER),
       carriageLength(-1),
       locomotiveLength(-1),
-      carriageGap(1),
+      carriageGap(1.),
       carriageDoors(2),
+      carriageDoorWidth(1.5),
+      maxPlatformDistance(3.),
       timeToTeleport(TTT_UNSET),
       timeToTeleportBidi(TTT_UNSET),
       speedFactorPremature(-1),
@@ -793,6 +801,16 @@ SUMOVTypeParameter::initRailVisualizationParameters() {
     if (hasParameter("carriageGap")) {
         carriageGap = StringUtils::toDouble(getParameter("carriageGap"));
         parametersSet |= VTYPEPARS_CARRIAGE_GAP_SET;
+    }
+    if (hasParameter("carriageDoors")) {
+        carriageDoors = StringUtils::toInt(getParameter("carriageDoors"));
+        parametersSet |= VTYPEPARS_CARRIAGE_DOORS_SET;
+    }
+    if (hasParameter("carriageDoorWidth")) {
+        carriageDoorWidth = StringUtils::toDouble(getParameter("carriageDoorWidth"));
+    }
+    if (hasParameter("maxPlatformDistance")) {
+        maxPlatformDistance = StringUtils::toDouble(getParameter("maxPlatformDistance"));
     }
     if (hasParameter("frontSeatPos")) {
         frontSeatPos = StringUtils::toDouble(getParameter("frontSeatPos"));
