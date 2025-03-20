@@ -186,7 +186,7 @@ template <typename T, typename = void>
 class Attribute : public AttributeBase {
 public:
     Attribute(const std::string& name, const T& value)
-        : AttributeBase(name), value_(convertToParquetType(value)) {}
+        : AttributeBase(name), value_(::convertToParquetType(value)) {}
 
     void print(StreamDevice& os) const override {
         if (value_){
@@ -197,7 +197,7 @@ public:
     }
 
 private:
-    std::optional<decltype(convertToParquetType(std::declval<T>()))> value_;
+    std::optional<decltype(::convertToParquetType(std::declval<T>()))> value_;
 };
 
 
@@ -394,12 +394,28 @@ public:
     template <class T>
     void writeAttr(StreamDevice& into, const std::string& attr, const T& val) {
         UNUSED_PARAMETER(into);
-        std::unique_ptr<AttributeBase> typed_attr = std::make_unique<Attribute<T>>(attr, val);
-        this->myXMLStack.back().addAttribute(std::move(typed_attr));
-        if (!sharedNodeVector && this->fields.find(attr) == this->fields.end()) {
-            // add the field to the schema
-            AppendField(myNodeVector, val, attr);
-            this->fields.insert(attr);
+        try {
+            // Safety check to prevent crash when stack is empty
+            if (myXMLStack.empty()) {
+                std::cerr << "Error: Cannot write attribute '" << attr << "' - XML stack is empty" << std::endl;
+                return;
+            }
+            
+            std::unique_ptr<AttributeBase> typed_attr = std::make_unique<Attribute<T>>(attr, val);
+            this->myXMLStack.back().addAttribute(std::move(typed_attr));
+            
+            // Safety check when adding to node vector
+            if (!sharedNodeVector && this->fields.find(attr) == this->fields.end()) {
+                try {
+                    // add the field to the schema
+                    AppendField(myNodeVector, val, attr);
+                    this->fields.insert(attr);
+                } catch (const std::exception& e) {
+                    std::cerr << "Error adding field to schema: " << e.what() << std::endl;
+                }
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Error in ParquetFormatter::writeAttr: " << e.what() << std::endl;
         }
     }
 

@@ -37,6 +37,7 @@
 #include "OutputDevice_CERR.h"
 #include "OutputDevice_Network.h"
 #include "OutputDevice_Parquet.h"
+#include "OutputDevice_ParquetUnstructured.h"
 #include "PlainXMLFormatter.h"
 #include <utils/common/StringUtils.h>
 #include <utils/common/UtilExceptions.h>
@@ -109,7 +110,27 @@ OutputDevice::getDevice(const std::string& name, bool usePrefix) {
         const int len = (int)name.length();
         if (file_ext == ".parquet" || file_ext == ".prq") {
 #ifdef HAVE_PARQUET
-            dev = new OutputDevice_Parquet(name2);
+            // Check if this is an FCD output file
+            bool isFCDOutput = false;
+            // Check if we're handling the fcd-output option
+            if (OptionsCont::getOptions().isSet("fcd-output")) {
+                const std::string fcdOutput = OptionsCont::getOptions().getString("fcd-output");
+                if (name == fcdOutput) {
+                    isFCDOutput = true;
+                }
+            }
+            // Also check if the filename contains "fcd"
+            if (!isFCDOutput && (name.find("fcd") != std::string::npos || name2.find("fcd") != std::string::npos)) {
+                isFCDOutput = true;
+            }
+            
+            if (isFCDOutput) {
+                // Use the structured Parquet writer for FCD outputs
+                dev = new OutputDevice_Parquet(name2);
+            } else {
+                // Use the unstructured Parquet writer for all other outputs
+                dev = new OutputDevice_ParquetUnstructured(name2);
+            }
 #else
             throw IOError(TL("Parquet output is not supported in this build."));
 #endif

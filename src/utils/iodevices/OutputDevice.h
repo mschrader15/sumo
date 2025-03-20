@@ -31,6 +31,7 @@
 #include <utils/xml/SUMOXMLDefinitions.h>
 #include "PlainXMLFormatter.h"
 #include "ParquetFormatter.h"
+#include "ParquetUnstructuredFormatter.h"
 #include "StreamDevices.h"
 
 
@@ -312,8 +313,14 @@ public:
             break;
         case OutputWriterType::PARQUET:
 #ifdef HAVE_PARQUET
-            // cast the writer to the correct type
-            getFormatter<ParquetFormatter>().writeAttr(getOStream(), attr, val);
+            // Explicitly check formatter type to handle both structured and unstructured outputs
+            if (dynamic_cast<ParquetUnstructuredFormatter*>(&this->getFormatter()) != nullptr) {
+                // Unstructured Parquet formatter
+                getFormatter<ParquetUnstructuredFormatter>().writeAttr(getOStream(), attr, val);
+            } else {
+                // Regular structured Parquet formatter
+                getFormatter<ParquetFormatter>().writeAttr(getOStream(), attr, val);
+            }
 #else
             throw IOError("Parquet output is not supported in this build. Please recompile with the correct options.");
 #endif
