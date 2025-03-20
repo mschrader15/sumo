@@ -62,6 +62,8 @@ Additional environment variables to configure S3 and Parquet behavior:
     <fcd-output value="s3://sumo-traffic-bucket/outputs/fcd_output.parquet"/>
 </additional>
 ```
+*For now please be explicit to mention fcd in the fcd output filename 
+and similarly edge and lane in edge, lane output files* 
 
 ### Example 2: Multiple S3 outputs for edge and lane
 
