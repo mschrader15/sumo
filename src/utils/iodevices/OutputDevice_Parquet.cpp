@@ -72,6 +72,7 @@ bool OutputDevice_Parquet::closeTag(const std::string& comment) {
         PARQUET_ASSIGN_OR_THROW(
             this->myFile, arrow::io::FileOutputStream::Open(this->myFilename));
 
+        // Use the optimized ParquetStream for better performance
         this->myStreamDevice = std::make_unique<ParquetStream>(parquet::ParquetFileWriter::Open(this->myFile, std::static_pointer_cast<parquet::schema::GroupNode>(
             parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, formatter->getNodeVector())
         ), this->builder.build()));

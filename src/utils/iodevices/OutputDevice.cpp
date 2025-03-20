@@ -126,9 +126,11 @@ OutputDevice::getDevice(const std::string& name, bool usePrefix) {
             
             if (isFCDOutput) {
                 // Use the structured Parquet writer for FCD outputs
+                std::cout << "Creating structured Parquet writer for FCD output: " << name2 << std::endl;
                 dev = new OutputDevice_Parquet(name2);
             } else {
                 // Use the unstructured Parquet writer for all other outputs
+                std::cout << "Creating unstructured Parquet writer for output: " << name2 << std::endl;
                 dev = new OutputDevice_ParquetUnstructured(name2);
             }
 #else

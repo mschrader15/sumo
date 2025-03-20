@@ -16,7 +16,8 @@
 /// @author  Michael Behrisch
 /// @author  Jakob Erdmann
 /// @author  Max Schrader
-/// @date    2024
+/// @author  Pranav Sateesh
+/// @date    2025
 ///
 // Output formatter for unstructured Parquet output
 /****************************************************************************/
@@ -626,130 +627,69 @@ public:
                 }
             }
             
-            // Check if we should buffer this row instead of writing it immediately
-            if (!schemaFinalized) {
-                // If we're not at the top level and we have a parent that contains attributes
-                // that should be propagated to children, copy them to the current element
-                if (myXMLStack.size() > 1) {
-                    unstructured_parquet::XMLElement& currentElement = myXMLStack.back();
+            // Handle parent-child attribute propagation
+            if (myXMLStack.size() > 1) {
+                unstructured_parquet::XMLElement& currentElement = myXMLStack.back();
+                
+                // Check if this is a lane element (typically has "_0" suffix in meandata)
+                bool isLaneElement = false;
+                const std::string& elemName = currentElement.getName();
+                if (elemName == "lane" || currentElement.getName().find("_") != std::string::npos) {
+                    isLaneElement = true;
+                }
+                
+                // Identify time interval attributes from any parent in the stack
+                // These are especially important for meandata where intervals apply to all children
+                for (int i = myXMLStack.size() - 2; i >= 0; i--) {
+                    unstructured_parquet::XMLElement& parentElement = myXMLStack[i];
                     
-                    // Check if this is a lane element (typically has "_0" suffix in meandata)
-                    bool isLaneElement = false;
-                    const std::string& elemName = currentElement.getName();
-                    if (elemName == "lane" || currentElement.getName().find("_") != std::string::npos) {
-                        isLaneElement = true;
-                    }
+                    // These attributes should always be inherited from parent to child
+                    const std::vector<std::string> inheritableAttrs = {"begin", "end", "interval", "id"};
                     
-                    // Identify time interval attributes from any parent in the stack
-                    // These are especially important for meandata where intervals apply to all children
-                    for (int i = myXMLStack.size() - 2; i >= 0; i--) {
-                        unstructured_parquet::XMLElement& parentElement = myXMLStack[i];
+                    for (const auto& attr : parentElement.getAttributes()) {
+                        const std::string& attrName = attr->getName();
                         
-                        // These attributes should always be inherited from parent to child
-                        const std::vector<std::string> inheritableAttrs = {"begin", "end", "interval", "id"};
+                        // Special handling for time attributes which should be inherited
+                        // Only propagate if child doesn't already have this attribute or it's empty
+                        bool shouldPropagate = std::find(inheritableAttrs.begin(), inheritableAttrs.end(), 
+                                                       attrName) != inheritableAttrs.end();
                         
-                        for (const auto& attr : parentElement.getAttributes()) {
-                            const std::string& attrName = attr->getName();
+                        if (shouldPropagate) {
+                            // Check if attribute is missing or empty in the current element
+                            bool isEmpty = false;
+                            if (currentElement.hasAttribute(attrName)) {
+                                // Check if it's empty
+                                std::string childValue = currentElement.getAttributeAsString(attrName);
+                                isEmpty = childValue.empty();
+                            }
                             
-                            // Special handling for time attributes which should be inherited
-                            // Only propagate if child doesn't already have this attribute or it's empty
-                            bool shouldPropagate = std::find(inheritableAttrs.begin(), inheritableAttrs.end(), 
-                                                           attrName) != inheritableAttrs.end();
-                            
-                            if (shouldPropagate) {
-                                // Check if attribute is missing or empty in the current element
-                                bool isEmpty = false;
-                                if (currentElement.hasAttribute(attrName)) {
-                                    // Check if it's empty
-                                    std::string childValue = currentElement.getAttributeAsString(attrName);
-                                    isEmpty = childValue.empty();
-                                }
-                                
-                                // Only propagate if the attribute doesn't exist or is empty
-                                if (!currentElement.hasAttribute(attrName) || isEmpty) {
-                                    // For lane elements, ensure they inherit time attributes from edges
-                                    std::string attrValue = attr->toString();
-                                    if (!attrValue.empty()) {
-                                        std::unique_ptr<unstructured_parquet::AttributeBase> attrCopy = 
-                                            std::make_unique<unstructured_parquet::Attribute<std::string>>(attrName, attrValue);
-                                        currentElement.addAttribute(std::move(attrCopy));
-                                        
-                                        // Also add to schema if needed
-                                        if (fields.find(attrName) == fields.end()) {
-                                            fields.insert(attrName);
-                                        }
+                            // Only propagate if the attribute doesn't exist or is empty
+                            if (!currentElement.hasAttribute(attrName) || isEmpty) {
+                                std::string attrValue = attr->toString();
+                                if (!attrValue.empty()) {
+                                    std::unique_ptr<unstructured_parquet::AttributeBase> attrCopy = 
+                                        std::make_unique<unstructured_parquet::Attribute<std::string>>(attrName, attrValue);
+                                    currentElement.addAttribute(std::move(attrCopy));
+                                    
+                                    // Also add to schema if needed
+                                    if (fields.find(attrName) == fields.end()) {
+                                        fields.insert(attrName);
                                     }
                                 }
                             }
                         }
                     }
                 }
-                
-                // Buffer the current row (last element in stack) for later writing
-                bufferedRows.push_back(std::move(myXMLStack.back()));
-                
-                // Pop the row we just buffered
-                myXMLStack.pop_back();
-                return true;
-            } else {
-                // Schema is finalized, but we'll still just buffer for now and write at the end
-                
-                // Similar to above, propagate parent attributes if needed
-                if (myXMLStack.size() > 1) {
-                    unstructured_parquet::XMLElement& currentElement = myXMLStack.back();
-                    
-                    // Check if this is a lane element
-                    bool isLaneElement = false;
-                    const std::string& elemName = currentElement.getName();
-                    if (elemName == "lane" || currentElement.getName().find("_") != std::string::npos) {
-                        isLaneElement = true;
-                    }
-                    
-                    // Look through all parents in the stack for inheritable attributes
-                    for (int i = myXMLStack.size() - 2; i >= 0; i--) {
-                        unstructured_parquet::XMLElement& parentElement = myXMLStack[i];
-                        
-                        // These attributes should always be inherited from parent to child
-                        const std::vector<std::string> inheritableAttrs = {"begin", "end", "interval", "id"};
-                        
-                        for (const auto& attr : parentElement.getAttributes()) {
-                            const std::string& attrName = attr->getName();
-                            
-                            // Special handling for time attributes which should be inherited
-                            bool shouldPropagate = std::find(inheritableAttrs.begin(), inheritableAttrs.end(), 
-                                                           attrName) != inheritableAttrs.end();
-                            
-                            if (shouldPropagate) {
-                                // Check if attribute is missing or empty in the current element
-                                bool isEmpty = false;
-                                if (currentElement.hasAttribute(attrName)) {
-                                    // Check if it's empty
-                                    std::string childValue = currentElement.getAttributeAsString(attrName);
-                                    isEmpty = childValue.empty();
-                                }
-                                
-                                // Only propagate if the attribute doesn't exist or is empty
-                                if (!currentElement.hasAttribute(attrName) || isEmpty) {
-                                    std::string attrValue = attr->toString();
-                                    if (!attrValue.empty()) {
-                                        std::unique_ptr<unstructured_parquet::AttributeBase> attrCopy = 
-                                            std::make_unique<unstructured_parquet::Attribute<std::string>>(attrName, attrValue);
-                                        currentElement.addAttribute(std::move(attrCopy));
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                if (!myXMLStack.back().written()) {
-                    // Buffer all rows even after schema is finalized
-                    bufferedRows.push_back(std::move(myXMLStack.back()));
-                }
-                // pop the last XMLElement and remove from memory
-                myXMLStack.pop_back();
-                return true;
             }
+            
+            // Buffer the current row (last element in stack) for later writing
+            if (!myXMLStack.back().written()) {
+                bufferedRows.push_back(std::move(myXMLStack.back()));
+            }
+            
+            // Pop the row we just processed
+            myXMLStack.pop_back();
+            return true;
         } catch (const std::exception& e) {
             // Log the error but don't crash
             std::cerr << "Error in ParquetUnstructuredFormatter::closeTag: " << e.what() << std::endl;

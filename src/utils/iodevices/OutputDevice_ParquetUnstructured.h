@@ -16,7 +16,8 @@
 /// @author  Michael Behrisch
 /// @author  Jakob Erdmann
 /// @author  Max Schrader
-/// @date    2024
+/// @author  Pranav Sateesh
+/// @date    2025
 ///
 // An output device that encapsulates a Parquet file with unstructured row-based format
 /****************************************************************************/
@@ -154,13 +155,18 @@ private:
     int myRowsInCurrentGroup = 0;
     
     /// @brief Number of rows to buffer before finalizing schema
-    size_t myBufferSize = 10000000;
+    size_t myBufferSize = 10000;
 
     parquet::schema::NodeVector myNodeVector;
 
     /** @brief Create a new Parquet file with the current schema
      */
     void createNewFile();
+    
+    /** @brief Write buffered rows to the Parquet file
+     * @param rows Vector of XML elements to write
+     */
+    void writeBufferedRows(std::vector<unstructured_parquet::XMLElement>& rows);
 };
 
 #endif // HAVE_PARQUET

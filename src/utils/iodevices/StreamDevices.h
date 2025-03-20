@@ -21,7 +21,8 @@ public:
     enum Type {
         OSTREAM, // std::ostream (or std::ofstream)
         COUT, // std::cout
-        PARQUET // parquet::StreamWriter
+        PARQUET, // parquet::StreamWriter (structured)
+        PARQUET_UNSTRUCTURED // parquet::StreamWriter with column management
     };
 
     // create a constructor that a type and raw write access
@@ -258,15 +259,109 @@ private:
 
 }; // Add the missing semicolon here
 
-class ParquetStream : public StreamDevice {
-
+// Base Parquet Stream class for shared functionality
 #ifdef HAVE_PARQUET
-
+class ParquetStreamBase : public StreamDevice {
 public:
+    ParquetStreamBase(Type streamType) : StreamDevice(streamType, false) {}
+    
+    virtual ~ParquetStreamBase() = default;
+    
+    bool ok() override { return true; }
+    bool good() override { return myStream != nullptr; }
+    
+    StreamDevice& flush() override { return *this; }
+    
+    void setPrecision(int precision) override { UNUSED_PARAMETER(precision); }
+    int precision() override { return 0; }
+    
+    std::string str() override { return ""; }
+    
+    operator std::ostream& () override { throw std::runtime_error("Not implemented"); }
+    
+    void str(const std::string& s) override { 
+        UNUSED_PARAMETER(s);
+        throw std::runtime_error("Not implemented");
+    }
+    
+    void setOSFlags(std::ios_base::fmtflags flags) override { UNUSED_PARAMETER(flags); }
+    
+protected:
+    std::unique_ptr<parquet::StreamWriter> myStream;
+};
+#endif
 
-    ParquetStream(std::unique_ptr<parquet::ParquetFileWriter> file) : StreamDevice(Type::PARQUET, false) {
-        // For StreamWriter, we need to move the unique_ptr into it
-        // Note: this approach means the StreamWriter will own the ParquetFileWriter
+// Fast direct Parquet Stream implementation
+class ParquetStream : public 
+#ifdef HAVE_PARQUET
+    ParquetStreamBase
+#else
+    StreamDevice
+#endif
+{
+#ifdef HAVE_PARQUET
+public:
+    ParquetStream(std::unique_ptr<parquet::ParquetFileWriter> file) : 
+        ParquetStreamBase(Type::PARQUET) {
+        // Simple direct construction for fast performance
+        myStream = std::make_unique<parquet::StreamWriter>(std::move(file));
+    }
+
+    void close() override {
+        if (myStream) {
+            try {
+                myStream->EndRowGroup();
+                myStream.reset();
+            } catch (const std::exception& e) {
+                std::cerr << "Error closing ParquetStream: " << e.what() << std::endl;
+            }
+        }
+    }
+
+    template <typename T>
+    void print(const T& t) {
+        if (myStream) {
+            (*myStream) << t;
+        }
+    }
+
+    StreamDevice& endLine() override {
+        if (myStream) {
+            myStream->EndRow();
+        }
+        return *this;
+    }
+
+#else
+public:
+    ParquetStream() : StreamDevice(Type::PARQUET, false) {}
+    
+    bool ok() override { return false; }
+    bool good() override { return false; }
+    StreamDevice& flush() override { return *this; }
+    void close() override {}
+    void setPrecision(int precision) override { UNUSED_PARAMETER(precision); }
+    int precision() override { return 0; }
+    std::string str() override { return ""; }
+    operator std::ostream& () override { throw std::runtime_error("Parquet not supported in this build"); }
+    void str(const std::string& s) override { UNUSED_PARAMETER(s); }
+    StreamDevice& endLine() override { return *this; }
+    void setOSFlags(std::ios_base::fmtflags flags) override { UNUSED_PARAMETER(flags); }
+#endif
+};
+
+// Advanced Parquet Stream implementation with column management for unstructured data
+class ParquetUnstructuredStream : public 
+#ifdef HAVE_PARQUET
+    ParquetStreamBase
+#else
+    StreamDevice
+#endif
+{
+#ifdef HAVE_PARQUET
+public:
+    ParquetUnstructuredStream(std::unique_ptr<parquet::ParquetFileWriter> file) : 
+        ParquetStreamBase(Type::PARQUET_UNSTRUCTURED) {
         // Save schema before we move the file into the StreamWriter
         auto schema = file->schema();
         numColumns = schema->num_columns();
@@ -283,22 +378,6 @@ public:
             columnTypes[col->name()] = col->physical_type();
             columnNames.push_back(col->name());
         }
-    };
-
-    virtual ~ParquetStream() = default;
-
-    bool ok() override {
-        return true;
-    }
-
-    bool good() override {
-        // check that the stream is not null
-        return myStream != nullptr;
-    }
-
-    StreamDevice& flush() override {
-        // do nothing
-        return *this;
     }
 
     void close() override {
@@ -319,19 +398,9 @@ public:
                 // Release the stream writer
                 myStream.reset();
             }
-            
-            // The file writer will be released automatically when the unique_ptr is destroyed
         } catch (const std::exception& e) {
-            std::cerr << "Error closing ParquetStream: " << e.what() << std::endl;
+            std::cerr << "Error closing ParquetUnstructuredStream: " << e.what() << std::endl;
         }
-    }
-
-    void setPrecision(int precision) override {
-        UNUSED_PARAMETER(precision);
-    }
-
-    std::string str() override {
-        return "";
     }
     
     // Method to handle writing values with proper conversion based on target column type
@@ -431,17 +500,6 @@ public:
             }
         }
     }
-
-    void setOSFlags(std::ios_base::fmtflags flags) override {UNUSED_PARAMETER(flags);}
-
-    operator std::ostream& () override {
-        throw std::runtime_error("Not implemented");
-    }
-
-    void str(const std::string& s) override {
-        UNUSED_PARAMETER(s);
-        throw std::runtime_error("Not implemented");
-    };
 
     StreamDevice& endLine() override {
         try {
@@ -561,15 +619,6 @@ public:
             currentColumnIndex = 0; // Reset column index for safety
         }
     }
-
-    // get the type of the stream
-    Type type() const override {
-        return Type::PARQUET;
-    }
-
-    int precision() override {
-        return 0;
-    }
     
     // Get the count of columns in the schema
     int getColumnCount() const {
@@ -659,12 +708,11 @@ public:
     }
 
 private:
-    std::unique_ptr<parquet::StreamWriter> myStream;
     int numColumns{0};
     int currentColumnIndex{0};
     std::map<std::string, parquet::Type::type> columnTypes;
     std::vector<std::string> columnNames;
-
+    
     // Helper conversion methods
     template <typename T>
     bool convertToBool(const T& value) {
@@ -795,10 +843,25 @@ private:
         }
     }
 
+#else
+public:
+    ParquetUnstructuredStream() : StreamDevice(Type::PARQUET_UNSTRUCTURED, false) {}
+    
+    bool ok() override { return false; }
+    bool good() override { return false; }
+    StreamDevice& flush() override { return *this; }
+    void close() override {}
+    void setPrecision(int precision) override { UNUSED_PARAMETER(precision); }
+    int precision() override { return 0; }
+    std::string str() override { return ""; }
+    operator std::ostream& () override { throw std::runtime_error("Parquet not supported in this build"); }
+    void str(const std::string& s) override { UNUSED_PARAMETER(s); }
+    StreamDevice& endLine() override { return *this; }
+    void setOSFlags(std::ios_base::fmtflags flags) override { UNUSED_PARAMETER(flags); }
 #endif
 };
 
-// implement a templated stream operator. The base class does nothing
+// implement a templated stream operator for all StreamDevice types
 template <typename T>
 StreamDevice& operator<<(StreamDevice& stream, const T& t) {
     try {
@@ -812,6 +875,13 @@ StreamDevice& operator<<(StreamDevice& stream, const T& t) {
         case StreamDevice::Type::PARQUET:
 #ifdef HAVE_PARQUET
             static_cast<ParquetStream*>(&stream)->print(t);
+#else
+            throw std::runtime_error("Parquet not supported in this build");
+#endif
+            break;
+        case StreamDevice::Type::PARQUET_UNSTRUCTURED:
+#ifdef HAVE_PARQUET
+            static_cast<ParquetUnstructuredStream*>(&stream)->print(t);
 #else
             throw std::runtime_error("Parquet not supported in this build");
 #endif
