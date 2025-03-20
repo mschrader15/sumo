@@ -34,6 +34,7 @@
 #include "ParquetUnstructuredFormatter.h"
 #include "StreamDevices.h"
 
+#define OUTPUT_ACCURACY 2
 
 // ===========================================================================
 // class definitions
@@ -130,6 +131,10 @@ public:
     /**  Closes all registered devices
      */
     static void closeAll(bool keepErrorRetrievers = false);
+
+    /** @brief Finalize all global output resources, especially S3 resources
+     */
+    static void finalizeGlobalOutput();
     /// @}
 
 
@@ -448,6 +453,9 @@ private:
 
     /// @brief old console code page to restore after ending
     static int myPrevConsoleCP;
+    
+    /// @brief default precision for output
+    static int myPrecision;
 
 protected:
     const std::string myFilename;

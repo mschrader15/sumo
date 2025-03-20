@@ -331,12 +331,10 @@ MsgHandler::initOutputOptions() {
 
 void
 MsgHandler::cleanupOnEnd() {
-    delete myMessageInstance;
-    myMessageInstance = nullptr;
-    delete myWarningInstance;
-    myWarningInstance = nullptr;
-    delete myErrorInstance;
-    myErrorInstance = nullptr;
+    OutputDevice::closeAll();
+    
+    // Finalize global resources including S3
+    OutputDevice::finalizeGlobalOutput();
 }
 
 

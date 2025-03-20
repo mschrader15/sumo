@@ -37,6 +37,10 @@
 #include <parquet/stream_reader.h>
 #include <parquet/stream_writer.h>
 
+// Include S3 filesystem
+#ifdef HAVE_S3
+#include <arrow/filesystem/s3fs.h>
+#endif
 
 
 /**
@@ -50,6 +54,13 @@
  * - SUMO_PARQUET_COMPRESSION: compression type (ZSTD, SNAPPY, GZIP, NONE)
  * - SUMO_PARQUET_ROWGROUP_SIZE: number of rows per row group (default: 1000000)
  * - SUMO_PARQUET_BUFFER_SIZE: buffer size for schema detection (default: 10000000)
+ * 
+ * For S3 output:
+ * - SUMO_S3_REGION: AWS region
+ * - SUMO_S3_ACCESS_KEY: AWS access key
+ * - SUMO_S3_SECRET_KEY: AWS secret key
+ * - SUMO_S3_SESSION_TOKEN: AWS session token (optional)
+ * - SUMO_S3_ENDPOINT: Custom endpoint for S3-compatible storage (optional)
  */
 class OutputDevice_ParquetUnstructured : public OutputDevice {
 public:
@@ -136,7 +147,7 @@ protected:
 
 private:
     /// The wrapped ofstream
-    std::shared_ptr<arrow::io::FileOutputStream> myFile = nullptr;
+    std::shared_ptr<arrow::io::OutputStream> myFile = nullptr;
     // the builder for the writer properties
     parquet::WriterProperties::Builder builder;
     // the schema
@@ -154,10 +165,21 @@ private:
     /// @brief Current number of rows in the current row group
     int myRowsInCurrentGroup = 0;
     
+    /// @brief Total number of rows written to this device
+    int myTotalRowsWritten = 0;
+    
     /// @brief Number of rows to buffer before finalizing schema
     size_t myBufferSize = 10000;
 
     parquet::schema::NodeVector myNodeVector;
+    
+    /// @brief Flag indicating if this is an S3 output
+    bool myIsS3 = false;
+    
+#ifdef HAVE_S3
+    /// S3 filesystem instance if writing to S3
+    std::shared_ptr<arrow::fs::S3FileSystem> myS3FileSystem = nullptr;
+#endif
 
     /** @brief Create a new Parquet file with the current schema
      */
@@ -167,6 +189,19 @@ private:
      * @param rows Vector of XML elements to write
      */
     void writeBufferedRows(std::vector<unstructured_parquet::XMLElement>& rows);
+    
+    /** @brief Create output stream based on the filename (S3 or local)
+     * @return Arrow output stream
+     */
+    std::shared_ptr<arrow::io::OutputStream> createOutputStream();
+    
+    /** @brief Parse S3 URL and extract bucket and key
+     * @param url S3 URL in format s3://bucket/path
+     * @param[out] bucket Bucket name
+     * @param[out] key Object key
+     * @return Success status
+     */
+    bool parseS3Url(const std::string& url, std::string& bucket, std::string& key);
 };
 
 #endif // HAVE_PARQUET
