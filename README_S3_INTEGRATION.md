@@ -101,6 +101,8 @@ Additional environment variables to configure S3 and Parquet behavior:
     <fcd-output value="s3://sumo-traffic-bucket/outputs/fcd_output.parquet"/>
 </additional>
 ```
+*For now please be explicit to mention fcd in the fcd output filename 
+and similarly edge and lane in edge, lane output files* 
 
 ### Example 2: Multiple S3 outputs for edge and lane
 
@@ -280,55 +282,6 @@ void OutputDevice::finalizeGlobalOutput() {
     }
 }
 ```
-
-## Troubleshooting
-
-### Common Issues
-
-- **ACCESS_DENIED errors**: Verify your AWS credentials and ensure the IAM user/role has appropriate permissions (s3:PutObject, s3:AbortMultipartUpload, s3:ListBucket)
-- **Connection timeouts**: Check network connectivity and firewall settings
-- **"S3 support not enabled"**: Ensure SUMO was compiled with S3 support
-- **Segmentation faults during shutdown**: This has been fixed with proper resource cleanup and synchronized S3 finalization
-
-### Permissions Required
-
-The minimum IAM policy needed:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:PutObject",
-        "s3:AbortMultipartUpload",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::your-bucket-name",
-        "arn:aws:s3:::your-bucket-name/*"
-      ]
-    }
-  ]
-}
-```
-
-## Security Best Practices
-
-- Use IAM roles instead of access keys when running on AWS infrastructure
-- Create IAM users with minimal permissions
-- Consider using temporary credentials via AWS STS
-- Don't hardcode credentials in scripts or configuration files
-- Use bucket policies to restrict access to specific IP ranges or VPCs
-
----
-
-## Contributing
-
-We love community contributions! If you encounter bugs, have suggestions, or want to enhance this S3-Parquet feature, open an issue or submit a pull request on the [SUMO GitHub repository](https://github.com/eclipse/sumo).
-
----
 
 ## Conclusion
 
