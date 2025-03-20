@@ -185,11 +185,6 @@ private:
      */
     void createNewFile();
     
-    /** @brief Write buffered rows to the Parquet file
-     * @param rows Vector of XML elements to write
-     */
-    void writeBufferedRows(std::vector<unstructured_parquet::XMLElement>& rows);
-    
     /** @brief Create output stream based on the filename (S3 or local)
      * @return Arrow output stream
      */
@@ -202,6 +197,9 @@ private:
      * @return Success status
      */
     bool parseS3Url(const std::string& url, std::string& bucket, std::string& key);
+
+    // New method to write a single row to Parquet
+    void writeRow(unstructured_parquet::XMLElement& row);
 };
 
 #endif // HAVE_PARQUET
