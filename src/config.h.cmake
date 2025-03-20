@@ -191,6 +191,9 @@
 /* defined if PARQUET is available */
 # cmakedefine HAVE_PARQUET
 
+/* defined if S3 is available */
+#cmakedefine HAVE_S3
+
 /* defined if GL2PS is available */
 #cmakedefine HAVE_GL2PS
 

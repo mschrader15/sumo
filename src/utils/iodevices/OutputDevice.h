@@ -31,8 +31,10 @@
 #include <utils/xml/SUMOXMLDefinitions.h>
 #include "PlainXMLFormatter.h"
 #include "ParquetFormatter.h"
+#include "ParquetUnstructuredFormatter.h"
 #include "StreamDevices.h"
 
+#define OUTPUT_ACCURACY 2
 
 // ===========================================================================
 // class definitions
@@ -129,6 +131,10 @@ public:
     /**  Closes all registered devices
      */
     static void closeAll(bool keepErrorRetrievers = false);
+
+    /** @brief Finalize all global output resources, especially S3 resources
+     */
+    static void finalizeGlobalOutput();
     /// @}
 
 
@@ -312,8 +318,14 @@ public:
             break;
         case OutputWriterType::PARQUET:
 #ifdef HAVE_PARQUET
-            // cast the writer to the correct type
-            getFormatter<ParquetFormatter>().writeAttr(getOStream(), attr, val);
+            // Explicitly check formatter type to handle both structured and unstructured outputs
+            if (dynamic_cast<ParquetUnstructuredFormatter*>(&this->getFormatter()) != nullptr) {
+                // Unstructured Parquet formatter
+                getFormatter<ParquetUnstructuredFormatter>().writeAttr(getOStream(), attr, val);
+            } else {
+                // Regular structured Parquet formatter
+                getFormatter<ParquetFormatter>().writeAttr(getOStream(), attr, val);
+            }
 #else
             throw IOError("Parquet output is not supported in this build. Please recompile with the correct options.");
 #endif
@@ -441,6 +453,9 @@ private:
 
     /// @brief old console code page to restore after ending
     static int myPrevConsoleCP;
+    
+    /// @brief default precision for output
+    static int myPrecision;
 
 protected:
     const std::string myFilename;
