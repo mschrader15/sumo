@@ -208,10 +208,6 @@ OutputDevice::OutputDevice(const int defaultIndentation, const std::string& file
 }
 
 
-OutputDevice::~OutputDevice() {
-    delete myFormatter;
-}
-
 
 bool
 OutputDevice::ok() {

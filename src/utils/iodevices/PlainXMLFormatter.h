@@ -70,7 +70,7 @@ public:
      * @param[in] into The output stream to use
      * @param[in] rootElement The root element to use
      */
-    bool writeHeader(std::ostream& into, const SumoXMLTag& rootElement);
+    bool writeHeader(std::ostream& into, const SumoXMLTag& rootElement) override;
 
 
     /** @brief Opens an XML tag
@@ -117,27 +117,16 @@ public:
     void writePadding(std::ostream& into, const std::string& val);
 
 
-    /** @brief writes an arbitrary attribute
-     *
-     * @param[in] into The output stream to use
-     * @param[in] attr The attribute (name)
-     * @param[in] val The attribute value
-     */
-    template <class T>
-    static void writeAttr(std::ostream& into, const std::string& attr, const T& val) {
-        into << " " << attr << "=\"" << toString(val, into.precision()) << "\"";
-    }
-
-
     /** @brief writes a named attribute
      *
      * @param[in] into The output stream to use
      * @param[in] attr The attribute (name)
      * @param[in] val The attribute value
      */
-    template <class T>
-    static void writeAttr(std::ostream& into, const SumoXMLAttr attr, const T& val) {
-        into << " " << toString(attr) << "=\"" << toString(val, into.precision()) << "\"";
+    void writeAttrImpl(std::ostream& into, const std::string& attr, const Value& val) override {
+        into << " " << attr << "=\"";
+        val.write(into);
+        into << "\"";
     }
 
     bool wroteHeader() const {
@@ -154,22 +143,3 @@ private:
     /// @brief whether a closing ">" might be missing
     bool myHavePendingOpener;
 };
-
-
-// ===========================================================================
-// specialized template implementations (for speedup)
-// ===========================================================================
-template <>
-inline void PlainXMLFormatter::writeAttr(std::ostream& into, const SumoXMLAttr attr, const double& val) {
-#ifdef HAVE_FMT
-    fmt::print(into, " {}=\"{:.{}f}\"", toString(attr), val, into.precision());
-#else
-    into << " " << toString(attr) << "=\"" << val << "\"";
-#endif
-}
-
-
-template <>
-inline void PlainXMLFormatter::writeAttr(std::ostream& into, const SumoXMLAttr attr, const std::string& val) {
-    into << " " << toString(attr) << "=\"" << val << "\"";
-}

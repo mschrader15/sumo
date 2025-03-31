@@ -29,6 +29,7 @@
 #include <utils/common/ToString.h>
 #include <utils/xml/SUMOXMLDefinitions.h>
 #include "PlainXMLFormatter.h"
+#include <functional>
 
 
 // ===========================================================================
@@ -141,7 +142,7 @@ public:
 
 
     /// @brief Destructor
-    virtual ~OutputDevice();
+    virtual ~OutputDevice() = default;
 
 
     /** @brief returns the information whether one can write into the device
@@ -197,7 +198,7 @@ public:
 
     template <typename E>
     bool writeHeader(const SumoXMLTag& rootElement) {
-        return static_cast<PlainXMLFormatter*>(myFormatter)->writeHeader(getOStream(), rootElement);
+        return myFormatter->writeHeader(getOStream(), rootElement);
     }
 
 
@@ -252,7 +253,7 @@ public:
      */
     template <typename T>
     OutputDevice& writeAttr(const SumoXMLAttr attr, const T& val) {
-        PlainXMLFormatter::writeAttr(getOStream(), attr, val);
+        myFormatter->writeAttr(getOStream(), attr, val);
         return *this;
     }
 
@@ -271,15 +272,16 @@ public:
     OutputDevice& writeOptionalAttr(const SumoXMLAttr attr, const T& val, long long int attributeMask) {
         assert((int)attr <= 63);
         if (attributeMask == 0 || useAttribute(attr, attributeMask)) {
-            PlainXMLFormatter::writeAttr(getOStream(), attr, val);
+            myFormatter->writeAttr(getOStream(), attr, val);
         }
+        
         return *this;
     }
     template <typename T>
     OutputDevice& writeOptionalAttr(const SumoXMLAttr attr, const T& val, SumoXMLAttrMask attributeMask) {
         assert((int)attr <= (int)attributeMask.size());
         if (attributeMask.none() || useAttribute(attr, attributeMask)) {
-            PlainXMLFormatter::writeAttr(getOStream(), attr, val);
+            myFormatter->writeAttr(getOStream(), attr, val);
         }
         return *this;
     }
@@ -293,7 +295,7 @@ public:
      */
     template <typename T>
     OutputDevice& writeAttr(const std::string& attr, const T& val) {
-        PlainXMLFormatter::writeAttr(getOStream(), attr, val);
+        myFormatter->writeAttr(getOStream(), attr, val);
         return *this;
     }
 
@@ -358,7 +360,6 @@ protected:
     /// @brief Returns the associated ostream
     virtual std::ostream& getOStream() = 0;
 
-
     /** @brief Called after every write access.
      *
      * Default implementation does nothing.
@@ -367,6 +368,7 @@ protected:
 
 
 private:
+
     /// @brief map from names to output devices
     static std::map<std::string, OutputDevice*> myOutputDevices;
 
@@ -378,7 +380,7 @@ protected:
 
 private:
     /// @brief The formatter for XML
-    OutputFormatter* const myFormatter;
+    std::unique_ptr<OutputFormatter> myFormatter;
 
 private:
     /// @brief Invalidated copy constructor.

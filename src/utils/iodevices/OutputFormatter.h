@@ -23,7 +23,13 @@
 
 #include <string>
 #include <vector>
+#include <functional>
 #include <utils/xml/SUMOXMLDefinitions.h>
+#ifdef HAVE_PARQUET
+#include "ParquetHelpers.h"
+#include <parquet/stream_writer.h>
+
+#endif
 
 
 // ===========================================================================
@@ -33,6 +39,87 @@ class Boundary;
 class Position;
 class PositionVector;
 class RGBColor;
+
+// ===========================================================================
+// Type Erasure Base Class
+// ===========================================================================
+class Value {
+public:
+    template <typename T, 
+              typename = typename std::enable_if<!std::is_same<typename std::decay<T>::type, Value>::value>::type>
+    Value(T&& value) : impl_(new Model<typename std::decay<T>::type>(std::forward<T>(value))) {}
+    
+    // Copy/move constructors
+    Value(const Value& other) : impl_(other.impl_->clone()) {}
+    Value(Value&& other) noexcept : impl_(std::move(other.impl_)) {}
+    
+    // Assignment operators
+    Value& operator=(const Value& other) {
+        impl_.reset(other.impl_->clone());
+        return *this;
+    }
+    
+    Value& operator=(Value&& other) noexcept {
+        impl_ = std::move(other.impl_);
+        return *this;
+    }
+    
+    // Interface methods
+#ifdef HAVE_PARQUET
+    void write(parquet::StreamWriter& into) const {
+        impl_->write(into);
+    }
+#endif
+    void write(std::ostream& into) const {
+        impl_->write(into);
+    }
+    
+private:
+    struct Concept {
+        virtual ~Concept() = default;
+#ifdef HAVE_PARQUET
+        virtual void write(parquet::StreamWriter&) const = 0;
+#endif
+        virtual void write(std::ostream&) const = 0;
+        virtual Concept* clone() const = 0;
+    };
+    
+    // Type-specific implementation
+    template <typename T>
+    struct Model : Concept {
+        explicit Model(T value) : value_(std::move(value)) {}
+        
+#ifdef HAVE_PARQUET
+        void write(parquet::StreamWriter& into) const override {
+            into << convertToParquetType(value_);
+        }
+#endif
+        
+        void write(std::ostream& into) const override {
+            if constexpr(std::is_same<T, std::string>::value) {
+                into << value_;
+            }
+            else if constexpr(std::is_same<T, double>::value) {
+#ifdef HAVE_FMT
+                fmt::print(into, "{:.{}f}", value_, into.precision());
+#else
+                into << std::fixed << std::setprecision(into.precision()) << value_;
+#endif
+            }
+            else {
+                into << toString(value_, into.precision());
+            }
+        }
+        
+        Concept* clone() const override {
+            return new Model(value_);
+        }
+        
+        T value_;
+    };
+    
+    std::unique_ptr<Concept> impl_;
+};
 
 
 // ===========================================================================
@@ -49,7 +136,7 @@ class RGBColor;
 class OutputFormatter {
 public:
     /// @brief Destructor
-    virtual ~OutputFormatter() { }
+    virtual ~OutputFormatter() = default;
 
 
     /** @brief Writes an XML header with optional configuration
@@ -64,8 +151,8 @@ public:
      * @todo Describe what is saved
      */
     virtual bool writeXMLHeader(std::ostream& into, const std::string& rootElement,
-                                const std::map<SumoXMLAttr, std::string>& attrs,
-                                bool includeConfig = true) = 0;
+        const std::map<SumoXMLAttr, std::string>& attrs,
+        bool includeConfig = true) = 0;
 
 
     /** @brief Opens an XML tag
@@ -103,5 +190,16 @@ public:
 
     virtual void writePadding(std::ostream& into, const std::string& val) = 0;
 
+    virtual bool writeHeader(std::ostream& into, const SumoXMLTag& rootElement) = 0;
+
     virtual bool wroteHeader() const = 0;
+
+    template <typename AttrType, typename T>
+    void writeAttr(std::ostream& into, const AttrType& attr, const T& val) {
+        Value wrapped_val(val);
+        writeAttrImpl(into, toString(attr), wrapped_val);
+    };
+
+    virtual void writeAttrImpl(std::ostream& into, const std::string& attr, const Value& val) = 0;
+
 };

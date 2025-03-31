@@ -209,6 +209,9 @@
 /* defined if python is available */
 #cmakedefine HAVE_PYTHON
 
+/* defined if PARQUET is available */
+# cmakedefine HAVE_PARQUET
+
 /* Define if auto-generated version.h should be used. */
 #define HAVE_VERSION_H
 #ifndef HAVE_VERSION_H
