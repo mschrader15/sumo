@@ -466,9 +466,9 @@ if (EIGEN3_FOUND)
     set(ENABLED_FEATURES "${ENABLED_FEATURES} Eigen")
 endif (EIGEN3_FOUND)
 
-option(WITH_PARQUET "Compile with Parquet support" ON)
 
 if (CHECK_OPTIONAL_LIBS)
+    
     file(GLOB GDAL_PATH "${SUMO_LIBRARIES}/gdal-?.?.?")
     file(GLOB FFMPEG_PATH "${SUMO_LIBRARIES}/FFMPEG-?.?.?")
     file(GLOB OSG_PATH "${SUMO_LIBRARIES}/OSG-?.?.?")
@@ -476,6 +476,8 @@ if (CHECK_OPTIONAL_LIBS)
     file(GLOB GEOS_PATH "${SUMO_LIBRARIES}/3rdPartyLibs/geos-*")
     set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};${GDAL_PATH};${FFMPEG_PATH};${OSG_PATH};${GL2PS_PATH};${GEOS_PATH}")
     file(GLOB SUMO_OPTIONAL_LIBRARIES_DLL "${GDAL_PATH}/bin/*.dll" "${FFMPEG_PATH}/bin/*.dll" "${OSG_PATH}/bin/*.dll" "${GL2PS_PATH}/bin/*.dll" "${JUPEDSIM_CUSTOMDIR}/bin/*.dll")
+    
+    option(WITH_PARQUET "Compile with Parquet support" ON)
 
     if(WITH_PARQUET)
         # CPP17 required for arrow
@@ -486,10 +488,6 @@ if (CHECK_OPTIONAL_LIBS)
             set(HAVE_PARQUET 1)
             set(ENABLED_FEATURES "${ENABLED_FEATURES} PARQUET")
             set(PARQUET_LIBRARY Parquet::parquet_shared)
-            # if (GTEST_FOUND)
-            #     add_definitions("GTest_SOURCE=Bundled")
-            # endif()
-            # this is for gtest compatibility
         else()
             message(WARNING "Parquet support requested but Arrow or Parquet libraries not found. Disabling Parquet support.")
             set(PARQUET_LIBRARY "")
@@ -561,7 +559,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(commonlibs
         utils_distribution utils_handlers utils_shapes utils_options
         utils_xml utils_geom utils_common utils_importio utils_iodevices utils_traction_wire foreign_tcpip
-        ${XercesC_LIBRARIES} ${ZLIB_LIBRARIES} ${PROJ_LIBRARY} ${Intl_LIBRARIES} ${FMT_LIBRARY})
+        ${XercesC_LIBRARIES} ${ZLIB_LIBRARIES} ${PROJ_LIBRARY} ${Intl_LIBRARIES} ${FMT_LIBRARY} ${PARQUET_LIBRARY})
 if (WIN32)
     set(commonlibs ${commonlibs} ws2_32)
 endif ()

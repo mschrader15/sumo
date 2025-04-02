@@ -44,83 +44,94 @@ class RGBColor;
 // Type Erasure Base Class
 // ===========================================================================
 class Value {
-public:
-    template <typename T, 
-              typename = typename std::enable_if<!std::is_same<typename std::decay<T>::type, Value>::value>::type>
-    Value(T&& value) : impl_(new Model<typename std::decay<T>::type>(std::forward<T>(value))) {}
-    
-    // Copy/move constructors
-    Value(const Value& other) : impl_(other.impl_->clone()) {}
-    Value(Value&& other) noexcept : impl_(std::move(other.impl_)) {}
-    
-    // Assignment operators
-    Value& operator=(const Value& other) {
-        impl_.reset(other.impl_->clone());
-        return *this;
-    }
-    
-    Value& operator=(Value&& other) noexcept {
-        impl_ = std::move(other.impl_);
-        return *this;
-    }
-    
-    // Interface methods
-#ifdef HAVE_PARQUET
-    void write(parquet::StreamWriter& into) const {
-        impl_->write(into);
-    }
-#endif
-    void write(std::ostream& into) const {
-        impl_->write(into);
-    }
-    
-private:
-    struct Concept {
-        virtual ~Concept() = default;
-#ifdef HAVE_PARQUET
-        virtual void write(parquet::StreamWriter&) const = 0;
-#endif
-        virtual void write(std::ostream&) const = 0;
-        virtual Concept* clone() const = 0;
+    public:
+        template <typename T, 
+                  typename = typename std::enable_if<!std::is_same<typename std::decay<T>::type, Value>::value>::type>
+        Value(T&& value) : impl_(new Model<typename std::decay<T>::type>(std::forward<T>(value))) {}
+        
+        // Copy/move constructors
+        Value(const Value& other) : impl_(other.impl_->clone()) {}
+        Value(Value&& other) noexcept : impl_(std::move(other.impl_)) {}
+        
+        // Assignment operators
+        Value& operator=(const Value& other) {
+            impl_.reset(other.impl_->clone());
+            return *this;
+        }
+        
+        Value& operator=(Value&& other) noexcept {
+            impl_ = std::move(other.impl_);
+            return *this;
+        }
+        
+        // Interface methods
+    #ifdef HAVE_PARQUET
+        void write(parquet::StreamWriter& into) const {
+            impl_->write(into);
+        }
+    #endif
+        void write(std::ostream& into) const {
+            impl_->write(into);
+        }
+        
+    private:
+        struct Concept {
+            virtual ~Concept() = default;
+    #ifdef HAVE_PARQUET
+            virtual void write(parquet::StreamWriter&) const = 0;
+    #endif
+            virtual void write(std::ostream&) const = 0;
+            virtual Concept* clone() const = 0;
+        };
+        
+        // Type-specific implementation
+        template <typename T>
+        struct Model : Concept {
+            explicit Model(T value) : value_(std::move(value)) {}
+            
+    #ifdef HAVE_PARQUET
+            void write(parquet::StreamWriter& into) const override {
+                into << convertToParquetType(value_);
+            }
+    #endif
+            
+            void write(std::ostream& into) const override {
+                writeImpl(into, value_);
+            }
+            
+            Concept* clone() const override {
+                return new Model(value_);
+            }
+            
+            // Helper methods for C++11 type dispatch instead of if constexpr
+            template <typename U>
+            typename std::enable_if<std::is_same<U, std::string>::value>::type
+            writeImpl(std::ostream& into, const U& val) const {
+                into << val;
+            }
+            
+            template <typename U>
+            typename std::enable_if<std::is_same<U, double>::value>::type
+            writeImpl(std::ostream& into, const U& val) const {
+    #ifdef HAVE_FMT
+                fmt::print(into, "{:.{}f}", val, into.precision());
+    #else
+                into << std::fixed << std::setprecision(into.precision()) << val;
+    #endif
+            }
+            
+            template <typename U>
+            typename std::enable_if<!std::is_same<U, std::string>::value && 
+                                   !std::is_same<U, double>::value>::type
+            writeImpl(std::ostream& into, const U& val) const {
+                into << toString(val, into.precision());
+            }
+            
+            T value_;
+        };
+        
+        std::unique_ptr<Concept> impl_;
     };
-    
-    // Type-specific implementation
-    template <typename T>
-    struct Model : Concept {
-        explicit Model(T value) : value_(std::move(value)) {}
-        
-#ifdef HAVE_PARQUET
-        void write(parquet::StreamWriter& into) const override {
-            into << convertToParquetType(value_);
-        }
-#endif
-        
-        void write(std::ostream& into) const override {
-            if constexpr(std::is_same<T, std::string>::value) {
-                into << value_;
-            }
-            else if constexpr(std::is_same<T, double>::value) {
-#ifdef HAVE_FMT
-                fmt::print(into, "{:.{}f}", value_, into.precision());
-#else
-                into << std::fixed << std::setprecision(into.precision()) << value_;
-#endif
-            }
-            else {
-                into << toString(value_, into.precision());
-            }
-        }
-        
-        Concept* clone() const override {
-            return new Model(value_);
-        }
-        
-        T value_;
-    };
-    
-    std::unique_ptr<Concept> impl_;
-};
-
 
 // ===========================================================================
 // class definitions
